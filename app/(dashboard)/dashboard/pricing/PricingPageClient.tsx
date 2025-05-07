@@ -1,16 +1,15 @@
 "use client";
 
 import { Suspense } from "react";
-import { Check, AlertTriangle, ArrowRight, Loader2, Star } from "lucide-react";
+import { Check, AlertTriangle, Loader2, Star } from "lucide-react";
 import { PremiumCard, PremiumCardContent } from "@/components/ui/premium-card";
 import { motion } from "framer-motion";
 import dynamic from 'next/dynamic';
 import PricingErrorBoundary from './PricingErrorBoundary';
 import { PricingProvider } from './PricingContext';
 import { useState, useEffect } from "react";
-import { Button } from "@/components/ui/button";
 
-// Dynamically import the Pro plan component
+// Dynamically import the Pro plan component (hidden by default)
 const PricingCardClient = dynamic(
   () => import('./PricingCardClient'),
   { 
@@ -48,7 +47,7 @@ export default function PricingPageClient({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [currentPlan, setCurrentPlan] = useState<string>('Pro');
-  
+
   // Fetch user's current plan
   useEffect(() => {
     const fetchUserPlan = async () => {
@@ -62,98 +61,12 @@ export default function PricingPageClient({
         console.error('Error fetching subscription:', err);
       }
     };
-    
     fetchUserPlan();
   }, []);
-  
-  // Ensure we have fallbacks for all data
-  const freePlan = products.find((product) => product.name === "Pro") || 
-    { id: "free-fallback", name: "Pro" };
-  
-  const moonlightingPlan = products.find((product) => product.name === "Moonlighting") || 
-    { id: "moonlighting-fallback", name: "Moonlighting" };
-  
-  const freePrice = prices.find((price) => price.productId === freePlan?.id) || 
-    { id: "price_free", productId: "free-fallback", unitAmount: 0 };
-  
-  const moonlightingPrice = prices.find((price) => price.productId === moonlightingPlan?.id) || 
-    { id: "price_1R5vvRFYYYXM77wG8jVM2pGC", productId: "moonlighting-fallback", unitAmount: 1499 };
-    
-  // Handle Moonlighting plan checkout
-  const handleMoonlightingCheckout = async () => {
-    setIsLoading(true);
-    setError(null);
-    
-    try {
-      // Always use the hardcoded Moonlighting price ID
-      const moonlightingPriceId = "price_1R5vvRFYYYXM77wG8jVM2pGC";
-      console.log('Initiating Moonlighting checkout, Price ID:', moonlightingPriceId);
-      
-      // Create form data
-      const formData = new FormData();
-      formData.append('priceId', moonlightingPriceId);
-      formData.append('returnUrl', '/dashboard');
 
-      // Submit form to server action
-      const response = await fetch('/api/stripe/checkout', {
-        method: 'POST',
-        body: formData,
-        headers: {
-          'Accept': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ message: 'Failed to initiate checkout' }));
-        throw new Error(errorData.message || 'Failed to initiate checkout');
-      }
-
-      const data = await response.json();
-      if (data.url) {
-        window.location.href = data.url;
-      } else {
-        throw new Error('No checkout URL returned');
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred');
-      console.error('Checkout error:', err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Handle downgrade from Moonlighting to Pro
-  const handleDowngrade = async () => {
-    setIsLoading(true);
-    setError(null);
-    
-    try {
-      const response = await fetch('/api/user/downgrade', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ message: 'Failed to downgrade plan' }));
-        throw new Error(errorData.message || 'Failed to downgrade plan');
-      }
-
-      const data = await response.json();
-      if (data.success) {
-        // Refresh the page to show updated plan status
-        window.location.reload();
-      } else {
-        throw new Error(data.message || 'Failed to downgrade plan');
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred');
-      console.error('Downgrade error:', err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  // Find Pro pricing data
+  const proProduct = products.find((product) => product.name === "Pro") || { id: "pro-fallback", name: "Pro" };
+  const proPrice = prices.find((price) => price.productId === proProduct.id) || { id: "price_free", productId: proProduct.id, unitAmount: 0 };
 
   return (
     <Suspense fallback={<PricingPageSkeleton />}>
@@ -161,7 +74,7 @@ export default function PricingPageClient({
         <PremiumCardContent className="px-6 py-8">
           <div className="max-w-5xl mx-auto space-y-8">
             <section className="space-y-6">
-              <motion.h2 
+              <motion.h2
                 className="text-4xl font-bold font-safiro text-[#F9F6EE] tracking-tight"
                 initial={{ opacity: 0, y: -20 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -169,25 +82,20 @@ export default function PricingPageClient({
               >
                 Choose Your <span className="text-[#B4916C]">Premium</span> Plan
               </motion.h2>
-              <motion.p 
+              <motion.p
                 className="text-lg text-[#C5C2BA] font-borna"
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.5, delay: 0.1 }}
               >
                 Upgrade your subscription to unlock more features and capabilities.
-                Change plans as you grow.
               </motion.p>
             </section>
 
-            <PricingProvider 
-              prices={prices} 
-              products={products}
-              error={pricingError}
-            >
+            <PricingProvider prices={prices} products={products} error={pricingError}>
               <PricingErrorBoundary>
-                <div className="grid md:grid-cols-2 gap-8 justify-center max-w-4xl mx-auto">
-                  {/* Custom Pro Plan Card */}
+                <div className="grid gap-8 justify-center max-w-4xl mx-auto">
+                  {/* Only Pro Plan Card */}
                   <motion.div
                     className="rounded-xl overflow-hidden transition-all duration-300 border border-[#222222] bg-[#111111]"
                     initial={{ opacity: 0, y: 20 }}
@@ -196,185 +104,37 @@ export default function PricingPageClient({
                     whileHover={{ y: -8, transition: { duration: 0.3, ease: "easeOut" } }}
                   >
                     <div className="bg-[#0D0D0D] py-6 px-6 relative overflow-hidden">
-                      <h2 className="text-2xl font-bold font-safiro text-[#F9F6EE] mb-2 tracking-tight">
-                        Pro
-                      </h2>
-                      
-                      <p className="text-4xl font-bold font-safiro text-[#F9F6EE] mb-2 tracking-tight">
-                        FREE
-                      </p>
-                      
+                      <h2 className="text-2xl font-bold font-safiro text-[#F9F6EE] mb-2 tracking-tight">Pro</h2>
+                      <p className="text-4xl font-bold font-safiro text-[#F9F6EE] mb-2 tracking-tight">FREE</p>
                       {currentPlan === "Pro" && (
                         <div className="absolute top-0 right-0 mt-2 mr-2">
-                          <span className="bg-green-500/20 text-green-400 px-2 py-1 text-xs rounded-full font-borna">
-                            Current Plan
-                          </span>
+                          <span className="bg-green-500/20 text-green-400 px-2 py-1 text-xs rounded-full font-borna">Current Plan</span>
                         </div>
                       )}
                     </div>
-                    
                     <div className="p-6 flex flex-col h-full">
                       <ul className="space-y-4 flex-grow mb-8">
                         {[
-                          "Optimize CV (i)", 
-                          "Document Analysis (i)", 
-                          "Job Description Generator (i)", 
+                          "Optimize CV (i)",
+                          "Document Analysis (i)",
+                          "Job Description Generator (i)",
                           "CV to Job Match (i)"
                         ].map((feature, index) => (
                           <li key={index} className="flex items-start group relative">
                             <div className="h-5 w-5 mr-3 rounded-full flex items-center justify-center flex-shrink-0 text-[#8A8782] bg-[#222222]">
                               <Check className="h-3 w-3" />
                             </div>
-                            <span className="text-[#C5C2BA] font-borna text-sm">
-                              {feature.includes("Optimize CV") && (
-                                <>Optimize CV <span className="text-[#8A8782]">Analyze & optimize for ATS (i)</span></>
-                              )}
-                              {feature.includes("Document Analysis") && (
-                                <>Document Analysis <span className="text-[#8A8782]">Extract insights & visualize data (i)</span></>
-                              )}
-                              {feature.includes("Job Description Generator") && (
-                                <>Job Description Generator <span className="text-[#8A8782]">Create detailed job descriptions (i)</span></>
-                              )}
-                              {feature.includes("CV to Job Match") && (
-                                <>CV to Job Match <span className="text-[#8A8782]">Analyze CV against job descriptions (i)</span></>
-                              )}
-                            </span>
+                            <span className="text-[#C5C2BA] font-borna text-sm">{feature.replace(" (i)", "")}</span>
                           </li>
                         ))}
                       </ul>
-                      
-                      {currentPlan === "Moonlighting" && (
+                      <div className="w-full">
                         <button
-                          onClick={handleDowngrade}
-                          disabled={isLoading}
-                          className="w-full font-medium font-safiro h-12 bg-[#222222] hover:bg-[#333333] text-[#F9F6EE] border border-[#333333] rounded-lg"
-                        >
-                          {isLoading ? (
-                            <>
-                              <Loader2 className="mr-2 h-4 w-4 animate-spin inline" />
-                              Processing...
-                            </>
-                          ) : (
-                            "Downgrade"
-                          )}
-                        </button>
-                      )}
-                      
-                      {currentPlan === "Pro" && (
-                        <div className="w-full font-medium font-safiro h-12 bg-[#222222] flex items-center justify-center text-green-400 border border-[#333333] rounded-lg">
-                          Current Plan
-                        </div>
-                      )}
-                      
-                      {currentPlan !== "Pro" && currentPlan !== "Moonlighting" && (
-                        <button
-                          className="w-full font-medium font-safiro h-12 bg-[#222222] hover:bg-[#333333] text-[#F9F6EE] border border-[#333333] rounded-lg"
-                        >
-                          Select Plan
-                        </button>
-                      )}
-                    </div>
-                  </motion.div>
-                  
-                  {/* Custom Moonlighting Card */}
-                  <motion.div
-                    className="rounded-xl overflow-hidden transition-all duration-300 border border-[#B4916C] bg-[#0A0A0A]"
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.5, delay: 0.3 }}
-                    whileHover={{ y: -8, transition: { duration: 0.3, ease: "easeOut" } }}
-                  >
-                    <div className="bg-gradient-to-r from-[#B4916C]/30 to-[#B4916C]/10 py-6 px-6 relative overflow-hidden">
-                      <Star className="absolute top-3 right-3 h-5 w-5 text-[#B4916C]" />
-                      
-                      <h2 className="text-2xl font-bold font-safiro text-[#F9F6EE] mb-2 tracking-tight">
-                        Moonlighting
-                        <span className="ml-2 text-xs bg-[#B4916C]/20 text-[#B4916C] px-2 py-1 rounded-full font-borna">
-                          Most Popular
-                        </span>
-                        <div className="mt-1 text-sm text-[#C5C2BA] font-borna">
-                          Upgrade from Pro to unlock all features
-                        </div>
-                      </h2>
-                      
-                      <p className="text-4xl font-bold font-safiro text-[#F9F6EE] mb-2 tracking-tight">
-                        $14.99
-                        <span className="text-xl font-normal text-[#8A8782] ml-1 font-borna">
-                          /month
-                        </span>
-                      </p>
-                      
-                      {currentPlan === "Moonlighting" && (
-                        <div className="absolute top-0 right-0 mt-2 mr-2">
-                          <span className="bg-green-500/20 text-green-400 px-2 py-1 text-xs rounded-full font-borna">
-                            Current Plan
-                          </span>
-                        </div>
-                      )}
-                      
-                      <div className="absolute inset-0 opacity-20 overflow-hidden pointer-events-none">
-                        <motion.div
-                          className="absolute h-[200%] w-[25%] bg-white top-[-120%] left-[-10%] transform rotate-45 blur-lg"
-                          animate={{
-                            left: ["0%", "120%"],
-                          }}
-                          transition={{
-                            repeat: Infinity,
-                            repeatDelay: 3,
-                            duration: 2.5,
-                            ease: "easeInOut",
-                          }}
-                        />
+                          onClick={() => {} }
+                          disabled
+                          className="w-full font-medium font-safiro h-12 bg-[#222222] text-[#F9F6EE] border border-[#333333] rounded-lg cursor-default"
+                        >{currentPlan === "Pro" ? "Current Plan" : "Select Plan"}</button>
                       </div>
-                    </div>
-                    
-                    <div className="p-6 flex flex-col h-full">
-                      <ul className="space-y-4 mb-4">
-                        {["Everything in Pro Plan ⓘ", "Access to Advanced AI Features ⓘ", "Premium Document Tools ⓘ"].map((feature, index) => (
-                          <li key={index} className="flex items-start group relative">
-                            <div className="h-5 w-5 mr-3 rounded-full flex items-center justify-center flex-shrink-0 text-[#B4916C] bg-[#B4916C]/10">
-                              <Check className="h-3 w-3" />
-                            </div>
-                            <span className="text-[#C5C2BA] font-borna text-sm">
-                              {feature.replace(" ⓘ", "")}
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
-                      
-                      <div className="text-center mb-3 text-[#B4916C] font-borna">
-                        <p>Get access to all premium features today</p>
-                      </div>
-                      
-                      {/* Moonlighting button */}
-                      <div className="mb-4">
-                        <button
-                          onClick={handleMoonlightingCheckout}
-                          disabled={isLoading || currentPlan === "Moonlighting"}
-                          style={{
-                            width: '100%',
-                            padding: '12px 10px',
-                            backgroundColor: '#B4916C',
-                            color: '#050505',
-                            borderRadius: '6px',
-                            fontWeight: 'bold',
-                            fontSize: '16px',
-                            cursor: currentPlan === "Moonlighting" ? 'default' : 'pointer',
-                            border: 'none',
-                            boxShadow: '0 3px 6px rgba(0, 0, 0, 0.15)',
-                            opacity: currentPlan === "Moonlighting" ? 0.7 : 1
-                          }}
-                        >
-                          {isLoading ? "Processing..." : currentPlan === "Moonlighting" ? "Current Plan" : "Upgrade"}
-                        </button>
-                      </div>
-                      
-                      {error && (
-                        <div className="text-red-400 text-sm mb-4 p-3 bg-red-500/10 rounded-lg flex items-start border border-red-900/30">
-                          <AlertTriangle className="h-4 w-4 mr-2 mt-0.5 flex-shrink-0" />
-                          <span>{error}</span>
-                        </div>
-                      )}
                     </div>
                   </motion.div>
                 </div>
@@ -393,10 +153,8 @@ export function PricingPageSkeleton() {
     <div className="animate-pulse space-y-8">
       <div className="h-12 bg-[#161616] rounded-lg w-3/4 mb-6"></div>
       <div className="h-6 bg-[#161616] rounded-lg w-1/2 mb-8"></div>
-      
-      <div className="grid md:grid-cols-2 gap-8">
+      <div className="grid gap-8">
         <PricingCardSkeleton />
-        <PricingCardSkeleton highlight={true} />
       </div>
     </div>
   );
@@ -405,17 +163,14 @@ export function PricingPageSkeleton() {
 // Individual pricing card skeleton for loading state
 function PricingCardSkeleton({ highlight = false }) {
   return (
-    <div 
+    <div
       className={`rounded-xl overflow-hidden border ${
-        highlight 
-          ? "border-[#B4916C] bg-[#0A0A0A]" 
-          : "border-[#222222] bg-[#111111]"
+        highlight ? "border-[#B4916C] bg-[#0A0A0A]" : "border-[#222222] bg-[#111111]"
       }`}
     >
-      <div className={`${
-        highlight 
-          ? "bg-gradient-to-r from-[#B4916C]/30 to-[#B4916C]/10" 
-          : "bg-[#0D0D0D]"
+      <div
+        className={`${
+          highlight ? "bg-gradient-to-r from-[#B4916C]/30 to-[#B4916C]/10" : "bg-[#0D0D0D]"
         } py-6 px-6 relative`}
       >
         <div className="h-8 bg-[#161616] rounded-lg w-1/2 mb-3"></div>
@@ -434,4 +189,5 @@ function PricingCardSkeleton({ highlight = false }) {
       </div>
     </div>
   );
-} 
+}
+

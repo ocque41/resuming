@@ -15,7 +15,7 @@ import ActionsDropdown from "@/components/ActionsDropdown";
 import Link from "next/link";
 import { 
   BarChart2, FileText, Briefcase, Upload, PieChart, TrendingUp, 
-  Search, Send
+  Search
 } from "lucide-react";
 import CVUploader from "@/components/CVUploader.client";
 import PremiumFeatureCard from "@/components/PremiumFeatureCard";
@@ -198,18 +198,6 @@ export default function DashboardClient({
           />
           
           <PremiumFeatureCard 
-            href="/dashboard/apply"
-            icon={Send}
-            title="Apply to Jobs"
-            description="AI agent applies to matching jobs ($0.99 per batch)"
-            iconBgColor="bg-[#050505]"
-            bgGradient
-            animationDelay={0.15}
-            withElevation
-            badge="New"
-          />
-          
-          <PremiumFeatureCard 
             href="/dashboard/documents"
             icon={FileText}
             title="Document Management"
@@ -256,4 +244,4 @@ export default function DashboardClient({
       </motion.div>
     </PremiumPageLayout>
   );
-} 
+}
