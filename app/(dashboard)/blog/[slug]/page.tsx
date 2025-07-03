@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { Navbar } from "@/components/ui/navbar";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, easeInOut } from "framer-motion";
 import { Calendar, Clock, ArrowLeft, Tag, Share, Bookmark, Heart } from "lucide-react";
 import ReactMarkdown from 'react-markdown';
 import { PremiumCard, PremiumCardContent } from "@/components/ui/premium-card";
@@ -44,7 +44,7 @@ export default function BlogPostPage() {
       y: 0,
       transition: {
         duration: 0.5,
-        ease: "easeInOut"
+        ease: easeInOut
       }
     }
   };
