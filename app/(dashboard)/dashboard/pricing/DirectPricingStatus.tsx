@@ -140,7 +140,7 @@ export default function DirectPricingStatus() {
         <div className="rounded-xl overflow-hidden border border-[#222222] bg-[#111111]">
           <div className="bg-[#0D0D0D] py-6 px-6 relative">
             <h3 className="text-2xl font-bold text-[#F9F6EE] font-safiro mb-2">Pro Plan</h3>
-            <p className="text-3xl font-bold text-[#F9F6EE] font-safiro">FREE</p>
+            <p className="text-3xl font-bold text-[#F9F6EE] font-safiro">2.47<span className="text-lg ml-1">/week</span></p>
             {currentPlan === "Pro" && (
               <div className="absolute top-0 right-0 mt-2 mr-2">
                 <span className="bg-green-500/20 text-green-400 px-2 py-1 text-xs rounded-full font-borna">

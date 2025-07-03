@@ -184,16 +184,10 @@ function PricingCard({
           )}
         </h2>
         <p className="text-4xl font-bold font-safiro text-[#F9F6EE] mb-2 tracking-tight">
-          {price === 0 ? (
-            "FREE"
-          ) : (
-            <>
-              ${(price || 0) / 100}
-              <span className="text-xl font-normal text-[#8A8782] ml-1 font-borna">
-                /{interval}
-              </span>
-            </>
-          )}
+          {(price || 0) / 100}
+          <span className="text-xl font-normal text-[#8A8782] ml-1 font-borna">
+            /{interval}
+          </span>
         </p>
         
         {highlight && (
