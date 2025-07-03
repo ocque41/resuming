@@ -5,7 +5,10 @@ import { stripe } from '@/lib/payments/stripe';
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
-    const priceId = searchParams.get('priceId') || 'price_1R5vvRFYYYXM77wG8jVM2pGC'; // Default to Moonlighting plan
+    const priceId =
+      searchParams.get('priceId') ||
+      process.env.STRIPE_PRO_PRICE_ID ||
+      'price_pro_fallback';
     const returnUrl = searchParams.get('returnUrl') || '/dashboard';
 
     // Get the current user
@@ -30,7 +33,7 @@ export async function GET(request: NextRequest) {
       allow_promotion_codes: true,
       subscription_data: {
         metadata: {
-          tier: 'moonlighting',
+          tier: 'pro',
           features: JSON.stringify({
             cv_uploads: 100,
             ats_analyses: 50,

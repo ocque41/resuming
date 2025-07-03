@@ -1,11 +1,11 @@
 # Automatic User Plan Upgrade System
 
-This module provides automated functionality to ensure all users have at least Pro plan access, while preserving existing Moonlighting subscriptions.
+This module provides automated functionality to ensure all users have the Pro plan.
 
 ## How It Works
 
-1. The system automatically upgrades all users to the Pro plan except those who are already on the Moonlighting plan
-2. This ensures everyone has access to Pro features without affecting paying Moonlighting customers
+1. The system automatically upgrades all users to the Pro plan
+2. This ensures everyone has access to Pro features
 
 ## Available Scripts
 
@@ -66,11 +66,12 @@ If users are not being upgraded properly, check:
 
 ## Development Notes
 
-The SQL query specifically excludes Moonlighting users with this condition:
+The SQL query simply sets all teams to the Pro plan:
 ```sql
-WHERE 
-  (plan_name IS NULL OR plan_name = 'Free' OR plan_name != 'Moonlighting')
-  AND (plan_name != 'Moonlighting')
+UPDATE teams
+SET plan_name = 'Pro',
+    subscription_status = 'active',
+    updated_at = NOW();
 ```
 
-This ensures we don't downgrade paying customers while still upgrading everyone else to Pro. 
+This ensures everyone has access to Pro features.

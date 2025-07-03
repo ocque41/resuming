@@ -40,13 +40,11 @@ interface TeamData {
 
 // Create fallback data for static rendering
 const fallbackPrices = [
-  { id: "price_free", productId: "free-fallback", unitAmount: 0 },
-  { id: "price-moonlighting-fallback", productId: "moonlighting-fallback", unitAmount: 1499 }
+  { id: "price_pro_fallback", productId: "pro-fallback", unitAmount: 247, interval: 'week' }
 ];
 
 const fallbackProducts = [
-  { id: "free-fallback", name: "Free" },
-  { id: "moonlighting-fallback", name: "Moonlighting" }
+  { id: "pro-fallback", name: "Pro" }
 ];
 
 // Revalidate prices every hour

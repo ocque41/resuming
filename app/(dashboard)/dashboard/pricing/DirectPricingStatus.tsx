@@ -36,7 +36,7 @@ export default function DirectPricingStatus() {
     fetchUserPlan();
   }, []);
 
-  // Handle downgrade from Moonlighting to Pro
+  // Handle downgrade from Pro to free (not used but kept for completeness)
   const handleDowngrade = async () => {
     setIsDowngrading(true);
     setError(null);
@@ -69,19 +69,18 @@ export default function DirectPricingStatus() {
     }
   };
 
-  // Handle upgrade to Moonlighting
+  // Handle upgrade to Pro plan
   const handleUpgrade = async () => {
     setIsLoading(true);
     setError(null);
     
     try {
-      // Always use the hardcoded Moonlighting price ID
-      const moonlightingPriceId = "price_1R5vvRFYYYXM77wG8jVM2pGC";
-      console.log('Initiating Moonlighting checkout, Price ID:', moonlightingPriceId);
+      const proPriceId = process.env.NEXT_PUBLIC_STRIPE_PRO_PRICE_ID || 'price_pro_fallback';
+      console.log('Initiating Pro checkout, Price ID:', proPriceId);
       
       // Create form data
       const formData = new FormData();
-      formData.append('priceId', moonlightingPriceId);
+      formData.append('priceId', proPriceId);
       formData.append('returnUrl', '/dashboard');
 
       // Submit form to server action
@@ -129,9 +128,9 @@ export default function DirectPricingStatus() {
           Your Current Plan: <span className="text-[#B4916C]">{currentPlan}</span>
         </h3>
         <p className="text-[#C5C2BA] font-borna">
-          {currentPlan === "Moonlighting" 
+          {currentPlan === "Pro"
             ? "You currently have access to all premium features."
-            : "Upgrade to Moonlighting to access all premium features."}
+            : "Upgrade to Pro to access all premium features."}
         </p>
       </div>
 
@@ -140,7 +139,7 @@ export default function DirectPricingStatus() {
         <div className="rounded-xl overflow-hidden border border-[#222222] bg-[#111111]">
           <div className="bg-[#0D0D0D] py-6 px-6 relative">
             <h3 className="text-2xl font-bold text-[#F9F6EE] font-safiro mb-2">Pro Plan</h3>
-            <p className="text-3xl font-bold text-[#F9F6EE] font-safiro">FREE</p>
+            <p className="text-3xl font-bold text-[#F9F6EE] font-safiro">2.47<span className="text-lg ml-1">/week</span></p>
             {currentPlan === "Pro" && (
               <div className="absolute top-0 right-0 mt-2 mr-2">
                 <span className="bg-green-500/20 text-green-400 px-2 py-1 text-xs rounded-full font-borna">

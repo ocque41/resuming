@@ -24,8 +24,8 @@ export default function PlanRestrictedFeature({
   children,
   planName,
   requiredPlan,
-  title = "Upgrade to Moonlighting",
-  description = "This feature requires the Moonlighting plan. Upgrade now to access it.",
+  title = "Upgrade to Pro",
+  description = "This feature requires the Pro plan. Upgrade now to access it.",
   className = "",
   overlayClassName = "",
   buttonText = "Upgrade Now"
@@ -38,11 +38,9 @@ export default function PlanRestrictedFeature({
   const normalizedRequiredPlan = requiredPlan.toLowerCase();
   
   // Check if user has access to this feature
-  // Users with Moonlighting plan have access to all features
-  const hasAccess = 
-    normalizedPlanName === "moonlighting" || // Moonlighting users have access to everything
-    normalizedPlanName === normalizedRequiredPlan || // Users with exact required plan have access
-    (normalizedRequiredPlan === "pro" && normalizedPlanName !== ""); // Pro features are accessible to all logged-in users
+  // Users must have the Pro plan for all gated features
+  const hasAccess =
+    normalizedPlanName === normalizedRequiredPlan && normalizedPlanName !== "";
   
   const handleUpgradeClick = () => {
     router.push("/dashboard/pricing");

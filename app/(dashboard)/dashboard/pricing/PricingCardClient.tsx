@@ -56,8 +56,7 @@ export default function PricingCardClient({
   const handleCheckout = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Regular plan checkout logic (for non-Moonlighting plans)
-    // Don't return early if this is a downgrade from Moonlighting to Pro
+    // Regular plan checkout logic
     if (isCurrentPlan) {
       return;
     }
@@ -132,14 +131,8 @@ export default function PricingCardClient({
       <div className="bg-[#0D0D0D] py-6 px-6 relative overflow-hidden">
         <h2 className="text-2xl font-bold font-safiro text-[#F9F6EE] mb-2 tracking-tight">{name}</h2>
         <p className="text-4xl font-bold font-safiro text-[#F9F6EE] mb-2 tracking-tight">
-          {price === 0 ? (
-            "FREE"
-          ) : (
-            <>
-              ${price / 100}
-              <span className="text-xl font-normal text-[#8A8782] ml-1 font-borna">/{interval}</span>
-            </>
-          )}
+          ${price / 100}
+          <span className="text-xl font-normal text-[#8A8782] ml-1 font-borna">/{interval}</span>
         </p>
         {isCurrentPlan && (
           <div className="absolute top-0 right-0 mt-2 mr-2">

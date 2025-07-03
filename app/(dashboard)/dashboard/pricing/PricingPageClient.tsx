@@ -66,7 +66,13 @@ export default function PricingPageClient({
 
   // Find Pro pricing data
   const proProduct = products.find((product) => product.name === "Pro") || { id: "pro-fallback", name: "Pro" };
-  const proPrice = prices.find((price) => price.productId === proProduct.id) || { id: "price_free", productId: proProduct.id, unitAmount: 0 };
+  const proPrice =
+    prices.find((price) => price.productId === proProduct.id) || {
+      id: "price_pro_fallback",
+      productId: proProduct.id,
+      unitAmount: 247,
+      interval: 'week'
+    };
 
   return (
     <Suspense fallback={<PricingPageSkeleton />}>
@@ -105,7 +111,10 @@ export default function PricingPageClient({
                   >
                     <div className="bg-[#0D0D0D] py-6 px-6 relative overflow-hidden">
                       <h2 className="text-2xl font-bold font-safiro text-[#F9F6EE] mb-2 tracking-tight">Pro</h2>
-                      <p className="text-4xl font-bold font-safiro text-[#F9F6EE] mb-2 tracking-tight">FREE</p>
+                      <p className="text-4xl font-bold font-safiro text-[#F9F6EE] mb-2 tracking-tight">
+                        {proPrice.unitAmount ? proPrice.unitAmount / 100 : 0}
+                        <span className="text-xl font-normal text-[#8A8782] ml-1 font-borna">/{proPrice.interval}</span>
+                      </p>
                       {currentPlan === "Pro" && (
                         <div className="absolute top-0 right-0 mt-2 mr-2">
                           <span className="bg-green-500/20 text-green-400 px-2 py-1 text-xs rounded-full font-borna">Current Plan</span>

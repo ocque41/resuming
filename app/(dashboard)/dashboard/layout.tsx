@@ -1,5 +1,8 @@
 import { Manrope } from "next/font/google";
 import localFont from "next/font/local";
+import { getUser, getTeamForUser } from "@/lib/db/queries.server";
+import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 
 const manrope = Manrope({ subsets: ["latin"] });
 const safiroFont = localFont({
@@ -11,7 +14,20 @@ const bornaFont = localFont({
   display: "swap",
 });
 
-export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
+  const path = headers().get('next-url') || '';
+  const user = await getUser();
+  if (!user) {
+    redirect('/sign-in');
+  }
+
+  const team = await getTeamForUser(user.id);
+  const hasPlan = team?.planName && team.subscriptionStatus === 'active';
+
+  if (!hasPlan && !path.startsWith('/dashboard/pricing')) {
+    redirect('/dashboard/pricing');
+  }
+
   return (
     <div className={`${manrope.className} ${safiroFont.className} ${bornaFont.className} flex flex-col min-h-screen w-full bg-[#050505] text-white`}>
       <main className="flex-1 overflow-y-auto px-4 py-2 mt-4">

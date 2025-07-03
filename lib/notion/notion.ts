@@ -10,7 +10,7 @@ const databaseId = process.env.NOTION_DB;
 /**
  * Adds a new user email to the Notion database or updates an existing one
  * @param email - User's email
- * @param planName - User's plan name (Free or Moonlighting)
+ * @param planName - User's plan name (e.g. Pro)
  * @param isSubscribed - Whether the user is subscribed to the newsletter
  * @param status - Email verification status
  * @returns result of the database operation
@@ -279,7 +279,7 @@ export async function addOrUpdateNotionUser(
 /**
  * Adds a new user email to the Notion database
  * @param email - User's email
- * @param planName - User's plan name (Free or Moonlighting)
+ * @param planName - User's plan name (e.g. Pro)
  * @param status - Email verification status
  * @returns result of the database operation
  */

@@ -14,13 +14,12 @@ export default function UpgradeButton() {
     setError(null);
     
     try {
-      // Always use the hardcoded Moonlighting price ID
-      const moonlightingPriceId = "price_1R5vvRFYYYXM77wG8jVM2pGC";
-      console.log('Initiating Moonlighting checkout, Price ID:', moonlightingPriceId);
+      const proPriceId = process.env.NEXT_PUBLIC_STRIPE_PRO_PRICE_ID || 'price_pro_fallback';
+      console.log('Initiating Pro checkout, Price ID:', proPriceId);
       
       // Create form data
       const formData = new FormData();
-      formData.append('priceId', moonlightingPriceId);
+      formData.append('priceId', proPriceId);
       formData.append('returnUrl', '/dashboard');
 
       // Submit form to server action
@@ -69,7 +68,7 @@ export default function UpgradeButton() {
             </>
           ) : (
             <>
-              <span className="font-safiro">Upgrade to Moonlighting</span>
+              <span className="font-safiro">Upgrade to Pro</span>
               <motion.div
                 initial={{ x: 0 }}
                 whileHover={{ x: 4 }}
@@ -89,7 +88,7 @@ export default function UpgradeButton() {
       )}
       
       <div className="mt-1 text-xs text-center text-white/70">
-        Price ID: price_1R5vvRFYYYXM77wG8jVM2pGC
+        Price ID: {process.env.NEXT_PUBLIC_STRIPE_PRO_PRICE_ID || 'price_pro_fallback'}
       </div>
     </div>
   );

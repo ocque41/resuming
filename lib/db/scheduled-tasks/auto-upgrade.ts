@@ -2,8 +2,7 @@ import { db } from '../drizzle';
 import { sql } from 'drizzle-orm';
 
 /**
- * Scheduled task to ensure all users have at least Pro plan access
- * except those who already have a Moonlighting subscription
+ * Scheduled task to ensure all users have the Pro plan
  * 
  * This can be called by a cron job or scheduler at regular intervals
  */
@@ -11,16 +10,13 @@ export async function ensureProPlanAccess() {
   console.log("[SCHEDULED TASK] Starting automatic plan upgrade process...");
   
   try {
-    // Update all teams to Pro plan status except those already on Moonlighting
+    // Update all teams to Pro plan status
     await db.execute(sql`
-      UPDATE teams 
-      SET 
-        plan_name = 'Pro', 
-        subscription_status = 'active', 
+      UPDATE teams
+      SET
+        plan_name = 'Pro',
+        subscription_status = 'active',
         updated_at = NOW()
-      WHERE 
-        (plan_name IS NULL OR plan_name = 'Free' OR plan_name != 'Moonlighting')
-        AND (plan_name != 'Moonlighting')
     `);
     
     console.log("[SCHEDULED TASK] Auto-upgrade completed. All users now have at least Pro access.");

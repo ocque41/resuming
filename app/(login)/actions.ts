@@ -77,6 +77,9 @@ export const signIn = validatedAction(signInSchema, async (data, formData) => {
 
   const { user: foundUser, team: foundTeam } = userWithTeam[0];
 
+  const hasActivePlan =
+    foundTeam?.planName && foundTeam.subscriptionStatus === 'active';
+
   const isPasswordValid = await comparePasswords(
     password,
     foundUser.passwordHash,
@@ -94,6 +97,10 @@ export const signIn = validatedAction(signInSchema, async (data, formData) => {
     setSession(foundUser),
     logActivity(foundTeam?.id, foundUser.id, ActivityType.SIGN_IN),
   ]);
+
+  if (!hasActivePlan) {
+    redirect('/dashboard/pricing');
+  }
 
   const redirectTo = formData.get('redirect') as string | null;
   if (redirectTo === 'checkout') {
@@ -186,7 +193,8 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
       // Create a new team for the user
       const newTeam: NewTeam = {
         name: `${email}'s Team`,
-        planName: "Pro" // Set default plan to Pro instead of Free
+        planName: null,
+        subscriptionStatus: null
       };
       
       const [createdTeam] = await db.insert(teams).values(newTeam).returning();
