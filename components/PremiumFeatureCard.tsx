@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { motion } from "framer-motion";
+import { motion, easeInOut } from "framer-motion";
 import { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -48,7 +48,7 @@ export default function PremiumFeatureCard({
       y: 0, 
       transition: {
         duration: 0.5,
-        ease: [0.22, 1, 0.36, 1],
+        ease: easeInOut,
         delay: animationDelay,
       }
     },
@@ -57,7 +57,7 @@ export default function PremiumFeatureCard({
       scale: withHoverScale ? 1.02 : 1,
       transition: {
         duration: 0.2,
-        ease: "easeInOut"
+        ease: easeInOut
       }
     }
   };
