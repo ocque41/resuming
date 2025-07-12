@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, Suspense, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import { motion, easeOut } from 'framer-motion';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { 
   FileText, 
@@ -87,7 +87,7 @@ const itemVariants = {
     y: 0,
     transition: {
       duration: 0.4,
-      ease: [0.22, 1, 0.36, 1]
+      ease: easeOut
     }
   }
 };
