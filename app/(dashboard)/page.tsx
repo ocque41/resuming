@@ -21,8 +21,7 @@ const fadeInUp = {
     opacity: 1, 
     y: 0, 
     transition: { 
-      duration: 0.6,
-      ease: "easeOut"
+      duration: 0.6
     } 
   }
 };
@@ -498,27 +497,29 @@ export default function HomePage() {
         </section>
 
         {/* Combined styles for mobile navbar and scrollbar */}
-        <style jsx global>{`
-          /* Mobile navbar visibility fix */
-          @media (max-width: 640px) {
-            nav {
-              display: block !important;
-              visibility: visible !important;
-              opacity: 1 !important;
+        <style dangerouslySetInnerHTML={{
+          __html: `
+            /* Mobile navbar visibility fix */
+            @media (max-width: 640px) {
+              nav {
+                display: block !important;
+                visibility: visible !important;
+                opacity: 1 !important;
+              }
             }
-          }
-          
-          /* Hide scrollbar for Chrome, Safari and Opera */
-          .no-scrollbar::-webkit-scrollbar {
-            display: none;
-          }
-          
-          /* Hide scrollbar for IE, Edge and Firefox */
-          .no-scrollbar {
-            -ms-overflow-style: none;  /* IE and Edge */
-            scrollbar-width: none;  /* Firefox */
-          }
-        `}</style>
+            
+            /* Hide scrollbar for Chrome, Safari and Opera */
+            .no-scrollbar::-webkit-scrollbar {
+              display: none;
+            }
+            
+            /* Hide scrollbar for IE, Edge and Firefox */
+            .no-scrollbar {
+              -ms-overflow-style: none;  /* IE and Edge */
+              scrollbar-width: none;  /* Firefox */
+            }
+          `
+        }} />
       </div>
     </PageTransition>
   );
