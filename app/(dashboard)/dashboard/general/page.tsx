@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Loader2, User, Mail, Check } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { motion, easeOut } from 'framer-motion';
 import { updateAccount } from '@/app/(login)/actions';
 
 type ActionState = {
@@ -45,7 +45,7 @@ export default function GeneralPage() {
     visible: { 
       opacity: 1, 
       y: 0,
-      transition: { duration: 0.4, ease: "easeOut" }
+      transition: { duration: 0.4, ease: easeOut }
     }
   };
 
