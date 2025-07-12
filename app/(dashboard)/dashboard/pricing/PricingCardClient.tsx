@@ -1,7 +1,7 @@
 "use client";
 
 import { Check, Star, ArrowRight, Loader2, AlertTriangle } from "lucide-react";
-import { motion } from "framer-motion";
+import { motion, easeInOut } from "framer-motion";
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { usePricing } from './PricingContext';
@@ -108,14 +108,14 @@ export default function PricingCardClient({
       transition: {
         duration: 0.5,
         delay: animationDelay,
-        ease: [0.22, 1, 0.36, 1]
+        ease: easeInOut
       }
     },
     hover: { 
       y: -8,
       transition: {
         duration: 0.3,
-        ease: "easeOut"
+        ease: easeInOut
       }
     }
   };
