@@ -8,7 +8,7 @@ import { Lock, Trash2, Loader2, Key, Shield, AlertCircle, Check, Eye, EyeOff } f
 import { startTransition, useState } from 'react';
 import { useActionState } from '@/lib/useActionState';
 import { updatePassword, deleteAccount } from '@/app/(login)/actions';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, easeOut } from 'framer-motion';
 
 type ActionState = {
   error?: string;
@@ -75,7 +75,7 @@ export default function SecurityPage() {
       y: 0,
       transition: {
         duration: 0.4,
-        ease: [0.22, 1, 0.36, 1]
+        ease: easeOut
       }
     }
   };
