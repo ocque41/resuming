@@ -3,6 +3,7 @@ import localFont from "next/font/local";
 import { getUser, getTeamForUser } from "@/lib/db/queries.server";
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
+import { Team } from "@/lib/db/schema";
 
 const manrope = Manrope({ subsets: ["latin"] });
 const safiroFont = localFont({
@@ -15,13 +16,14 @@ const bornaFont = localFont({
 });
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const path = headers().get('next-url') || '';
+  const headersList = await headers();
+  const path = headersList.get('next-url') || '';
   const user = await getUser();
   if (!user) {
     redirect('/sign-in');
   }
 
-  const team = await getTeamForUser(user.id);
+  const team = await getTeamForUser(user.id) as Team | null;
   const hasPlan = team?.planName && team.subscriptionStatus === 'active';
 
   if (!hasPlan && !path.startsWith('/dashboard/pricing')) {
