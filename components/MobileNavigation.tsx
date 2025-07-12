@@ -81,7 +81,6 @@ export default function MobileNavigation() {
       x: "100%",
       transition: {
         duration: 0.3,
-        ease: [0.22, 1, 0.36, 1],
       }
     },
     open: {
@@ -89,7 +88,6 @@ export default function MobileNavigation() {
       x: 0,
       transition: {
         duration: 0.4,
-        ease: [0.22, 1, 0.36, 1],
         staggerChildren: 0.05,
         delayChildren: 0.1,
       }
@@ -106,7 +104,6 @@ export default function MobileNavigation() {
       x: 0,
       transition: {
         duration: 0.3,
-        ease: [0.22, 1, 0.36, 1],
       }
     }
   };
