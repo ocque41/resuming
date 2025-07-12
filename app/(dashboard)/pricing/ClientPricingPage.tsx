@@ -141,15 +141,13 @@ function PricingCard({
       y: 0,
       transition: {
         duration: 0.5,
-        delay: animationDelay,
-        ease: [0.22, 1, 0.36, 1]
+        delay: animationDelay
       }
     },
     hover: { 
       y: -8,
       transition: {
-        duration: 0.3,
-        ease: "easeOut"
+        duration: 0.3
       }
     }
   };
