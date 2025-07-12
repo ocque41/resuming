@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, easeInOut } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { gradients, colors } from "@/lib/design-tokens";
 import { ChevronLeft, ChevronRight } from "lucide-react";
@@ -79,7 +79,7 @@ export default function PremiumPageLayout({
       scale: 1,
       transition: {
         duration: animationDuration,
-        ease: [0.22, 1, 0.36, 1],
+        ease: easeInOut,
         delay: animationDelay,
       },
     },
@@ -87,7 +87,7 @@ export default function PremiumPageLayout({
       opacity: 0,
       transition: {
         duration: 0.3,
-        ease: [0.22, 1, 0.36, 1],
+        ease: easeInOut,
       },
     },
   };
