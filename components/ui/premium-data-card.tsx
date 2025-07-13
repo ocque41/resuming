@@ -1,5 +1,5 @@
 import React from "react";
-import { motion } from "framer-motion";
+import { motion, easeInOut } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { LucideIcon } from "lucide-react";
 import { colors } from "@/lib/design-tokens";
@@ -68,7 +68,7 @@ export default function PremiumDataCard({
       y: 0, 
       transition: {
         duration: 0.5,
-        ease: [0.22, 1, 0.36, 1],
+        ease: easeInOut,
         delay: animationDelay,
       }
     },
