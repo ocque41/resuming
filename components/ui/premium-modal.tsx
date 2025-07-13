@@ -1,6 +1,6 @@
 import * as React from "react";
 import { X } from "lucide-react";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion, easeInOut } from "framer-motion";
 import { cn } from "@/lib/utils";
 
 interface PremiumModalProps {
@@ -102,7 +102,7 @@ export function PremiumModal({
         scale: 1, 
         transition: { 
           duration: 0.3,
-          ease: [0.22, 1, 0.36, 1],
+          ease: easeInOut,
         } 
       },
       exit: { 
@@ -110,7 +110,7 @@ export function PremiumModal({
         scale: 0.95, 
         transition: { 
           duration: 0.2,
-          ease: [0.22, 1, 0.36, 1],
+          ease: easeInOut,
         } 
       },
     },
@@ -121,7 +121,7 @@ export function PremiumModal({
         y: 0, 
         transition: { 
           duration: 0.3,
-          ease: [0.22, 1, 0.36, 1],
+          ease: easeInOut,
         } 
       },
       exit: { 
@@ -129,7 +129,7 @@ export function PremiumModal({
         y: 30, 
         transition: { 
           duration: 0.2,
-          ease: [0.22, 1, 0.36, 1],
+          ease: easeInOut,
         } 
       },
     },
