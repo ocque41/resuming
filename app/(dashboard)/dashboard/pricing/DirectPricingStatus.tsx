@@ -5,15 +5,24 @@ import { Button } from "@/components/ui/button";
 import { Loader2, Check, AlertTriangle } from "lucide-react";
 import { motion } from "framer-motion";
 
-export default function DirectPricingStatus() {
-  const [currentPlan, setCurrentPlan] = useState<string>("");
+interface DirectPricingStatusProps {
+  initialPlan?: string;
+}
+export default function DirectPricingStatus({ initialPlan }: DirectPricingStatusProps) {
+  const [currentPlan, setCurrentPlan] = useState<string>(initialPlan ?? "");
   const [isLoading, setIsLoading] = useState(false);
   const [isDowngrading, setIsDowngrading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [planDataFetched, setPlanDataFetched] = useState(false);
+  const [planDataFetched, setPlanDataFetched] = useState(!!initialPlan);
 
-  // Fetch user's current plan
+  // Fetch user's current plan if no initial plan was provided
   useEffect(() => {
+    if (initialPlan) {
+      // Plan info already available
+      setPlanDataFetched(true);
+      return;
+    }
+
     const fetchUserPlan = async () => {
       try {
         const response = await fetch('/api/user/subscription');
@@ -32,9 +41,9 @@ export default function DirectPricingStatus() {
         setPlanDataFetched(true);
       }
     };
-    
+
     fetchUserPlan();
-  }, []);
+  }, [initialPlan]);
 
   // Handle downgrade from Pro to free (not used but kept for completeness)
   const handleDowngrade = async () => {

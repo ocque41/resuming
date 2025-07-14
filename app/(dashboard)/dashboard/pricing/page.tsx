@@ -108,7 +108,7 @@ export default async function DashboardPricingPage() {
       >
         <Suspense fallback={<PricingPageSkeleton />}>
           {/* Use our new direct status component */}
-          <DirectPricingStatus />
+          <DirectPricingStatus initialPlan={teamData?.teamMembers?.[0]?.team?.planName} />
           
           {/* Hidden for debugging - old component 
           <PricingPageClient 
