@@ -82,7 +82,7 @@ export default function ClientPricingPage({ prices, products }: ClientPricingPag
             Choose Your <span className="text-[#B4916C]">Premium</span> Plan
           </h2>
           <p className="text-xl text-[#C5C2BA] font-borna mt-4">
-            Enjoy a 1-day free trial to experience the full power of our platform
+            Experience the full power of our platform
           </p>
           <p className="text-lg text-[#C5C2BA] font-borna">
             Upgrade or downgrade your plan anytime as your needs evolve.
