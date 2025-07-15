@@ -32,7 +32,7 @@ describe('Utils', () => {
 
     it('should handle unknown error types', () => {
       const result = formatError({ custom: 'error' });
-      expect(result).toBe('Unknown error');
+      expect(result).toBe('An unknown error occurred');
     });
   });
 }); 

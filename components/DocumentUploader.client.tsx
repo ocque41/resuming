@@ -173,7 +173,7 @@ export default function DocumentUploader({
               : 'border-gray-600 hover:border-[#B4916C]/50 hover:bg-black/30'
           }`}
         >
-          <input {...getInputProps()} />
+          <input data-testid="file-input" {...getInputProps()} />
           
           <div className="flex flex-col items-center justify-center gap-2">
             {!files.length ? (
