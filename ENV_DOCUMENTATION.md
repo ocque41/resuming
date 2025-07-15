@@ -39,6 +39,12 @@ AWS_ACCESS_KEY_ID=your-access-key-id
 AWS_SECRET_ACCESS_KEY=your-secret-access-key
 ```
 
+### Database Connection
+
+For deployments on platforms like Vercel, Postgres connections must use SSL.
+Ensure your `DATABASE_URL` or `POSTGRES_URL` includes `sslmode=require` or other
+SSL options.
+
 ### Authentication Configuration
 
 ```
