@@ -71,7 +71,7 @@ export default async function DashboardPricingPage() {
     
     // Log the team plan data to see what's being provided to the client
     console.log("Server-side team data:", {
-      planName: teamData?.teamMembers?.[0]?.team?.planName,
+      planName: teamData?.planName,
       userId: user.id,
       hasTeam: !!teamData
     });
@@ -108,7 +108,7 @@ export default async function DashboardPricingPage() {
       >
         <Suspense fallback={<PricingPageSkeleton />}>
           {/* Use our new direct status component */}
-          <DirectPricingStatus initialPlan={teamData?.teamMembers?.[0]?.team?.planName} />
+          <DirectPricingStatus initialPlan={teamData?.planName} />
           
           {/* Hidden for debugging - old component 
           <PricingPageClient 
