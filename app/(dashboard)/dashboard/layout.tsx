@@ -16,7 +16,7 @@ const bornaFont = localFont({
 });
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const headersList = headers();
+  const headersList = await headers();
   const nextUrl = headersList.get('next-url') || '';
   let pathname = nextUrl;
   try {
