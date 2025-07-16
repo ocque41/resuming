@@ -34,6 +34,8 @@ An AI-powered document management system built with Next.js and OpenAI Agents SD
    S3_BUCKET_NAME=your_s3_bucket_name
    PYTHON_API_URL=http://localhost:8000
    ```
+   When deploying to platforms like Vercel, ensure your database connection uses SSL.
+   For example, set `DATABASE_URL="postgres://user:pass@host/db?sslmode=require"`.
 4. Start the development server:
    ```
    npm run dev
