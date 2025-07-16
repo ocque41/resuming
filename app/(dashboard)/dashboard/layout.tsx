@@ -16,8 +16,17 @@ const bornaFont = localFont({
 });
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const headersList = await headers();
-  const path = headersList.get('next-url') || '';
+  const headersList = headers();
+  const nextUrl = headersList.get('next-url');
+  let pathname: string | null = nextUrl ?? null;
+  if (nextUrl) {
+    try {
+      pathname = new URL(nextUrl, 'http://internal').pathname;
+    } catch {
+      // next-url may already be a pathname
+      pathname = nextUrl;
+    }
+  }
   const user = await getUser();
   if (!user) {
     redirect('/sign-in');
@@ -26,7 +35,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const team = await getTeamForUser(user.id) as Team | null;
   const hasPlan = team?.planName && team.subscriptionStatus === 'active';
 
-  if (!hasPlan && !path.startsWith('/dashboard/pricing')) {
+  if (!hasPlan && pathname && !pathname.startsWith('/dashboard/pricing')) {
     redirect('/dashboard/pricing');
   }
 
