@@ -10,13 +10,24 @@ export default function BillingButton({ variant = "primary" }) {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleBilling = () => {
+  const handleBilling = async () => {
     setIsLoading(true);
-    // Navigate to the in-app pricing page
-    router.push('/dashboard/pricing');
-    // We'll set isLoading back to false after a short delay
-    // to handle the transition animation
-    setTimeout(() => setIsLoading(false), 500);
+    try {
+      const res = await fetch('/api/stripe/portal', { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.url) {
+          window.location.href = data.url;
+          return;
+        }
+      }
+      router.push('/dashboard/pricing');
+    } catch (error) {
+      console.error('Failed to open billing portal:', error);
+      router.push('/dashboard/pricing');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const buttonStyles = variant === "primary"

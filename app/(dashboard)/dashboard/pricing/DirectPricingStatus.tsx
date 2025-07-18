@@ -29,7 +29,7 @@ export default function DirectPricingStatus({ initialPlan }: DirectPricingStatus
         if (response.ok) {
           const data = await response.json();
           console.log('User plan data from API:', data);
-          setCurrentPlan(data.planName || 'Pro');
+          setCurrentPlan(data.planName || 'Free');
         } else {
           console.error('Error response from subscription API:', response.status);
           const text = await response.text();
