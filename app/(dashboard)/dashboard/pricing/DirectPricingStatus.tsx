@@ -180,11 +180,19 @@ export default function DirectPricingStatus({ initialPlan }: DirectPricingStatus
               Current Plan
             </div>
           ) : (
-            <Button 
+            <Button
+              onClick={handleUpgrade}
               className="w-full font-medium h-12 bg-[#222222] hover:bg-[#333333] text-[#F9F6EE] border border-[#333333]"
-              disabled
+              disabled={isLoading}
             >
-              Select Plan
+              {isLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Redirecting...
+                </>
+              ) : (
+                'Select Plan'
+              )}
             </Button>
           )}
         </div>

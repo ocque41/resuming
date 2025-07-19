@@ -193,7 +193,7 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
       // Create a new team for the user
       const newTeam: NewTeam = {
         name: `${email}'s Team`,
-        planName: null,
+        planName: 'Free',
         subscriptionStatus: null
       };
       
