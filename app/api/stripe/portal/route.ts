@@ -9,22 +9,14 @@ export async function POST() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const teamData = await getTeamForUser(user.id);
-    if (!teamData) {
+    const team = await getTeamForUser(user.id) as unknown as import('@/lib/db/schema').Team;
+    if (!team) {
       return NextResponse.json({ error: 'Team not found' }, { status: 404 });
     }
+    const { id, name, createdAt, updatedAt, stripeCustomerId, stripeSubscriptionId, stripeProductId, planName, subscriptionStatus } = team;
+    const teamObj = { id, name, createdAt, updatedAt, stripeCustomerId, stripeSubscriptionId, stripeProductId, planName, subscriptionStatus };
 
-    // If teamData is an array, extract the first element
-    const teamObj = Array.isArray(teamData) ? teamData[0] : teamData;
-    if (!teamObj) {
-      return NextResponse.json({ error: 'Team not found' }, { status: 404 });
-    }
-
-    // Extract only the Team fields
-    const { id, name, createdAt, updatedAt, stripeCustomerId, stripeSubscriptionId, stripeProductId, planName, subscriptionStatus } = teamObj;
-    const team = { id, name, createdAt, updatedAt, stripeCustomerId, stripeSubscriptionId, stripeProductId, planName, subscriptionStatus };
-
-    const session = await createCustomerPortalSession(team);
+    const session = await createCustomerPortalSession(teamObj);
     return NextResponse.json({ url: session.url });
   } catch (error) {
     console.error('Error creating customer portal session:', error);

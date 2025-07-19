@@ -49,7 +49,8 @@ const verificationRequiredRoutes = [
 ];
 
 // Routes that require an active subscription
-const subscriptionRequiredRoutes = [...verificationRequiredRoutes];
+const subscriptionRequiredRoutes = ['/dashboard'];
+const subscriptionExcludedRoutes = ['/dashboard/pricing'];
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -75,14 +76,9 @@ export async function middleware(request: NextRequest) {
     return pathname.startsWith(route);
   });
 
-  const requiresSubscription = subscriptionRequiredRoutes.some(route => {
-    if (route.includes('(.*)')) {
-      const pattern = route.replace(/\(\.\*\)/g, '.*');
-      const regex = new RegExp(`^${pattern}`);
-      return regex.test(pathname);
-    }
-    return pathname.startsWith(route);
-  });
+  const requiresSubscription =
+    subscriptionRequiredRoutes.some(route => pathname.startsWith(route)) &&
+    !subscriptionExcludedRoutes.some(route => pathname.startsWith(route));
 
   // Always allow public routes, even without a session
   if (isPublicRoute) {
