@@ -42,12 +42,12 @@ export default function PricingCardClient({
           throw new Error('Failed to fetch subscription details');
         }
         const data = await response.json();
-        setCurrentUserPlan(data.planName || 'Pro');
-        setIsCurrentPlan(data.planName === name || (name === 'Pro' && data.planName === 'Free'));
+        setCurrentUserPlan(data.planName || '');
+        setIsCurrentPlan(data.planName === name);
       } catch (err) {
         console.error('Error checking subscription:', err);
-        setCurrentUserPlan('Pro');
-        setIsCurrentPlan(name === 'Pro');
+        setCurrentUserPlan('');
+        setIsCurrentPlan(false);
       }
     };
     checkCurrentPlan();

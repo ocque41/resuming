@@ -14,7 +14,7 @@ export default function UpgradeButton() {
     setError(null);
     
     try {
-      const proPriceId = process.env.NEXT_PUBLIC_STRIPE_PRO_PRICE_ID || 'price_pro_fallback';
+      const proPriceId = 'price_1RgdHLFYYYXM77wGbZ4pYFXF';
       console.log('Initiating Pro checkout, Price ID:', proPriceId);
       
       // Create form data
@@ -88,7 +88,7 @@ export default function UpgradeButton() {
       )}
       
       <div className="mt-1 text-xs text-center text-white/70">
-        Price ID: {process.env.NEXT_PUBLIC_STRIPE_PRO_PRICE_ID || 'price_pro_fallback'}
+        Price ID: price_1RgdHLFYYYXM77wGbZ4pYFXF
       </div>
     </div>
   );

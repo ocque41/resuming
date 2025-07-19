@@ -7,8 +7,7 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
     const priceId =
       searchParams.get('priceId') ||
-      process.env.STRIPE_PRO_PRICE_ID ||
-      'price_pro_fallback';
+      'price_1RgdHLFYYYXM77wGbZ4pYFXF';
     const returnUrl = searchParams.get('returnUrl') || '/dashboard';
 
     // Get the current user

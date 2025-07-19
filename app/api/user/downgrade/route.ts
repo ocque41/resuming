@@ -38,7 +38,7 @@ export async function POST() {
     }
 
     // Check if the user already has the Pro plan
-    if (team.planName === 'Pro' || team.planName === 'Free') {
+    if (team.planName === 'Pro') {
       return NextResponse.json(
         { message: 'Already on Pro plan, no downgrade needed' }
       );
