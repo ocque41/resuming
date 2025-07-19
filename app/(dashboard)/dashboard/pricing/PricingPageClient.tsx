@@ -70,7 +70,7 @@ export default function PricingPageClient({
     prices.find((price) => price.productId === proProduct.id) || {
       id: "price_pro_fallback",
       productId: proProduct.id,
-      unitAmount: 247,
+      unitAmount: 0,
       interval: 'week'
     };
 

@@ -48,6 +48,10 @@ const verificationRequiredRoutes = [
   '/api/job-match/(.*)'
 ];
 
+// Routes that require an active subscription
+const subscriptionRequiredRoutes = ['/dashboard'];
+const subscriptionExcludedRoutes = ['/dashboard/pricing'];
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const sessionCookie = request.cookies.get('session');
@@ -71,6 +75,10 @@ export async function middleware(request: NextRequest) {
     }
     return pathname.startsWith(route);
   });
+
+  const requiresSubscription =
+    subscriptionRequiredRoutes.some(route => pathname.startsWith(route)) &&
+    !subscriptionExcludedRoutes.some(route => pathname.startsWith(route));
 
   // Always allow public routes, even without a session
   if (isPublicRoute) {
@@ -115,13 +123,23 @@ export async function middleware(request: NextRequest) {
       
       // For premium routes, check verification status
       if (requiresVerification) {
-        // If email verification status isn't in the session or is false,
-        // we should fetch it from the database, but for performance reasons
-        // we'll redirect to a verification check page that will do this check
-        // and then either continue or show verification required
-        
         // We'll check email verification in the routes themselves
-        // by extending our user session to include verification status
+      }
+
+      if (requiresSubscription) {
+        try {
+          const subRes = await fetch(
+            new URL('/api/user/subscription', request.url),
+            { headers: { cookie: request.headers.get('cookie') || '' } }
+          );
+          const subData = subRes.ok ? await subRes.json() : null;
+          if (!subData || subData.planName !== 'Pro') {
+            return NextResponse.redirect(new URL('/dashboard/pricing', request.url));
+          }
+        } catch (err) {
+          console.error('[AUTH] Error checking subscription:', err);
+          return NextResponse.redirect(new URL('/dashboard/pricing', request.url));
+        }
       }
     } catch (error) {
       console.error('[AUTH] Error updating session:', error);

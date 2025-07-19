@@ -40,7 +40,7 @@ interface TeamData {
 
 // Create fallback data for static rendering
 const fallbackPrices = [
-  { id: "price_pro_fallback", productId: "pro-fallback", unitAmount: 247, interval: 'week' }
+  { id: "price_pro_fallback", productId: "pro-fallback", unitAmount: 0, interval: 'week' }
 ];
 
 const fallbackProducts = [
@@ -98,12 +98,9 @@ export default async function DashboardPricingPage() {
       <PremiumPageLayout
         title="Upgrade Your Plan"
         subtitle="Choose the plan that fits your needs"
-        backUrl="/dashboard"
         withGradientBackground
         withScrollIndicator
         animation="fade"
-        teamData={teamData}
-        activityLogs={activityLogs as ActivityLog[]}
         maxWidth="6xl"
       >
         <Suspense fallback={<PricingPageSkeleton />}>
@@ -130,13 +127,7 @@ export default async function DashboardPricingPage() {
         <p className="text-lg text-[#C5C2BA] font-borna mb-8 text-center max-w-md">
           We're experiencing some technical difficulties. Please try again later or contact support.
         </p>
-        <Link 
-          href="/dashboard" 
-          className="inline-flex items-center justify-center bg-[#B4916C] hover:bg-[#A3815B] text-[#050505] px-6 py-2 rounded-lg transition-all duration-300 h-12 font-medium"
-        >
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Return to Dashboard
-        </Link>
+        {/* Intentionally omit navigation links on this page */}
       </div>
     );
   }
