@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getUser, getTeamForUser } from '@/lib/db/queries.server';
 import { createCustomerPortalSession } from '@/lib/payments/stripe';
-import { Team } from '@/lib/db/schema';
 
 export async function POST() {
   try {
@@ -10,19 +9,22 @@ export async function POST() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const team = await getTeamForUser(user.id);
-    if (!team) {
+    const teamData = await getTeamForUser(user.id);
+    if (!teamData) {
       return NextResponse.json({ error: 'Team not found' }, { status: 404 });
     }
 
-    // Defensive: If team is an array, use the first element
-    const teamObj = Array.isArray(team) ? team[0] : team;
+    // If teamData is an array, extract the first element
+    const teamObj = Array.isArray(teamData) ? teamData[0] : teamData;
     if (!teamObj) {
       return NextResponse.json({ error: 'Team not found' }, { status: 404 });
     }
 
-    const { teamMembers, ...plainTeam } = teamObj;
-    const session = await createCustomerPortalSession(plainTeam as Team);
+    // Extract only the Team fields
+    const { id, name, createdAt, updatedAt, stripeCustomerId, stripeSubscriptionId, stripeProductId, planName, subscriptionStatus } = teamObj;
+    const team = { id, name, createdAt, updatedAt, stripeCustomerId, stripeSubscriptionId, stripeProductId, planName, subscriptionStatus };
+
+    const session = await createCustomerPortalSession(team);
     return NextResponse.json({ url: session.url });
   } catch (error) {
     console.error('Error creating customer portal session:', error);

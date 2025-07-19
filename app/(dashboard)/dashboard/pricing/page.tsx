@@ -40,7 +40,7 @@ interface TeamData {
 
 // Create fallback data for static rendering
 const fallbackPrices = [
-  { id: "price_pro_fallback", productId: "pro-fallback", unitAmount: 247, interval: 'week' }
+  { id: "price_pro_fallback", productId: "pro-fallback", unitAmount: 0, interval: 'week' }
 ];
 
 const fallbackProducts = [

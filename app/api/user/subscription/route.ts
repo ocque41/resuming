@@ -15,9 +15,9 @@ export async function GET() {
     // Get the user's team
     const teamData = await getTeamForUser(user.id);
     if (!teamData) {
-      // If no team is found, default to Free plan
+      // No team found yet
       return NextResponse.json({
-        planName: 'Free',
+        planName: null,
         subscriptionStatus: null,
         stripeProductId: null,
         stripeSubscriptionId: null,
@@ -30,7 +30,7 @@ export async function GET() {
 
     // Return the team's subscription details
     return NextResponse.json({
-      planName: team.planName || 'Free',
+      planName: team.planName || null,
       subscriptionStatus: team.subscriptionStatus || null,
       stripeProductId: team.stripeProductId || null,
       stripeSubscriptionId: team.stripeSubscriptionId || null,

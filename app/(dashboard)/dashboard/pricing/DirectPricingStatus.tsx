@@ -29,7 +29,7 @@ export default function DirectPricingStatus({ initialPlan }: DirectPricingStatus
         if (response.ok) {
           const data = await response.json();
           console.log('User plan data from API:', data);
-          setCurrentPlan(data.planName || 'Free');
+          setCurrentPlan(data.planName || 'None');
         } else {
           console.error('Error response from subscription API:', response.status);
           const text = await response.text();
@@ -84,7 +84,10 @@ export default function DirectPricingStatus({ initialPlan }: DirectPricingStatus
     setError(null);
     
     try {
-      const proPriceId = process.env.NEXT_PUBLIC_STRIPE_PRO_PRICE_ID || 'price_pro_fallback';
+      const proPriceId = process.env.NEXT_PUBLIC_STRIPE_PRO_PRICE_ID;
+      if (!proPriceId) {
+        throw new Error('Pro plan price ID not configured');
+      }
       console.log('Initiating Pro checkout, Price ID:', proPriceId);
       
       // Create form data
