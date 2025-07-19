@@ -29,7 +29,7 @@ export default function DirectPricingStatus({ initialPlan }: DirectPricingStatus
         if (response.ok) {
           const data = await response.json();
           console.log('User plan data from API:', data);
-          setCurrentPlan(data.planName || 'Pro');
+          setCurrentPlan(data.planName || 'Free');
         } else {
           console.error('Error response from subscription API:', response.status);
           const text = await response.text();
@@ -180,11 +180,19 @@ export default function DirectPricingStatus({ initialPlan }: DirectPricingStatus
               Current Plan
             </div>
           ) : (
-            <Button 
+            <Button
+              onClick={handleUpgrade}
               className="w-full font-medium h-12 bg-[#222222] hover:bg-[#333333] text-[#F9F6EE] border border-[#333333]"
-              disabled
+              disabled={isLoading}
             >
-              Select Plan
+              {isLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Redirecting...
+                </>
+              ) : (
+                'Select Plan'
+              )}
             </Button>
           )}
         </div>
