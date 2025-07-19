@@ -23,8 +23,20 @@ export default function UserMenu({ teamData, activityLogs }: UserMenuProps) {
     window.location.href = "/";
   };
 
-  const handleManageSubscription = () => {
-    router.push("/dashboard/pricing");
+  const handleManageSubscription = async () => {
+    try {
+      const res = await fetch('/api/stripe/portal', { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.url) {
+          window.location.href = data.url;
+          return;
+        }
+      }
+    } catch (error) {
+      console.error('Failed to open billing portal:', error);
+    }
+    router.push('/dashboard/pricing');
   };
 
   const menuItems = [
