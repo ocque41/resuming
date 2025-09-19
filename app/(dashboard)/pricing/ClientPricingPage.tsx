@@ -1,8 +1,9 @@
 "use client";
 
-import { Check, Star } from "lucide-react";
+import { Check, Loader2, Star } from "lucide-react";
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
+import { useManageSubscription } from "@/hooks/use-manage-subscription";
 
 interface StripePrice {
   id: string;
@@ -37,6 +38,10 @@ interface ClientPricingPageProps {
 
 export default function ClientPricingPage({ prices, products }: ClientPricingPageProps) {
   const router = useRouter();
+  const {
+    openCustomerPortal: handleManageSubscription,
+    isLoading: isManagingSubscription,
+  } = useManageSubscription({ fallbackPath: "/dashboard/pricing" });
   
   // Handle checkout client-side
   const handleCheckout = (priceId: string) => {
@@ -87,6 +92,28 @@ export default function ClientPricingPage({ prices, products }: ClientPricingPag
           <p className="text-lg text-[#C5C2BA] font-borna">
             Upgrade or downgrade your plan anytime as your needs evolve.
           </p>
+          <motion.div
+            className="flex flex-col sm:flex-row sm:items-center gap-4 rounded-xl border border-[#222222] bg-[#0D0D0D] p-4"
+            variants={itemVariants}
+          >
+            <button
+              onClick={handleManageSubscription}
+              disabled={isManagingSubscription}
+              className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#B4916C] px-5 py-3 font-safiro text-sm uppercase tracking-wide text-[#050505] transition-colors duration-200 hover:bg-[#A3815B] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isManagingSubscription ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Redirecting...
+                </>
+              ) : (
+                "Manage My Subscription"
+              )}
+            </button>
+            <p className="text-sm text-[#C5C2BA] font-borna">
+              Visit the Stripe billing portal to cancel, downgrade, or update your plan at any time.
+            </p>
+          </motion.div>
         </motion.section>
 
         <div className="grid md:grid-cols-2 gap-8 justify-center mb-8 max-w-4xl mx-auto">

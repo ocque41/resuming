@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import { getUser, getTeamForUser } from '@/lib/db/queries.server';
-import { createCustomerPortalSession } from '@/lib/payments/stripe';
+import {
+  MISSING_STRIPE_CUSTOMER_ERROR,
+  createCustomerPortalSession,
+} from '@/lib/payments/stripe';
 
 export async function POST() {
   try {
@@ -47,6 +50,14 @@ export async function POST() {
     return NextResponse.json({ url: session.url });
   } catch (error) {
     console.error('Error creating customer portal session:', error);
+
+    if (
+      error instanceof Error &&
+      error.message === MISSING_STRIPE_CUSTOMER_ERROR
+    ) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+
     return NextResponse.json(
       { error: 'Failed to create customer portal session' },
       { status: 500 }

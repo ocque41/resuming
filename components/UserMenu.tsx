@@ -3,12 +3,12 @@
 
 import { useState, Fragment } from "react";
 import { Menu, Transition } from "@headlessui/react";
-import { useRouter } from "next/navigation";
 import { MicroCard } from "@/components/ui/micro-card";
 import MyDialog from "@/components/ui/dialogui";
 import ClientSettingsDialogContent from "@/components/ClientSettingsPage";
 import { motion } from "framer-motion";
 import { Settings, LogOut, DollarSign, ChevronDown } from "lucide-react";
+import { useManageSubscription } from "@/hooks/use-manage-subscription";
 
 interface UserMenuProps {
   teamData: any;
@@ -16,41 +16,31 @@ interface UserMenuProps {
 }
 
 export default function UserMenu({ teamData, activityLogs }: UserMenuProps) {
-  const router = useRouter();
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   const handleLogout = () => {
     window.location.href = "/";
   };
 
-  const handleManageSubscription = async () => {
-    try {
-      const res = await fetch('/api/stripe/portal', { method: 'POST' });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.url) {
-          window.location.href = data.url;
-          return;
-        }
-      }
-    } catch (error) {
-      console.error('Failed to open billing portal:', error);
-    }
-    router.push('/dashboard/pricing');
-  };
+  const { openCustomerPortal: handleManageSubscription, isLoading: isManagingSubscription } =
+    useManageSubscription({ fallbackPath: '/dashboard/pricing' });
 
   const menuItems = [
     {
-      label: "Manage Subscription",
+      key: "manage-subscription",
+      label: isManagingSubscription ? "Redirecting..." : "Manage My Subscription",
       icon: DollarSign,
-      onClick: handleManageSubscription
+      onClick: handleManageSubscription,
+      disabled: isManagingSubscription,
     },
     {
+      key: "settings",
       label: "Settings",
       icon: Settings,
       onClick: () => setIsSettingsOpen(true)
     },
     {
+      key: "logout",
       label: "Log Out",
       icon: LogOut,
       onClick: handleLogout
@@ -84,15 +74,18 @@ export default function UserMenu({ teamData, activityLogs }: UserMenuProps) {
           leaveTo="transform opacity-0 scale-95"
         >
           <Menu.Items className="absolute right-0 mt-2 w-56 origin-top-right bg-[#111111] border border-[#222222] rounded-lg shadow-lg focus:outline-none z-50 py-1 sm:right-0 max-sm:right-0 max-sm:left-auto">
-            {menuItems.map((item, index) => (
-              <Menu.Item key={item.label}>
+            {menuItems.map((item) => (
+              <Menu.Item key={item.key}>
                 {({ active }) => (
                   <motion.button
-                    whileHover={{ x: 4 }}
+                    whileHover={item.disabled ? undefined : { x: 4 }}
                     onClick={item.onClick}
+                    disabled={item.disabled}
                     className={`${
                       active ? "bg-[#161616]" : ""
-                    } flex items-center w-full px-4 py-3 text-sm text-[#F9F6EE] font-borna`}
+                    } flex items-center w-full px-4 py-3 text-sm text-[#F9F6EE] font-borna ${
+                      item.disabled ? "opacity-50 cursor-not-allowed" : ""
+                    }`}
                   >
                     <item.icon className="h-4 w-4 mr-3 text-[#B4916C]" />
                     {item.label}
