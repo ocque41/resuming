@@ -57,69 +57,40 @@ export async function createCheckoutSession({
   redirect(session.url!);
 }
 
+function resolveBaseUrl() {
+  const baseUrl =
+    process.env.BASE_URL || process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+
+  try {
+    const url = new URL(baseUrl);
+    return url.origin;
+  } catch (error) {
+    console.warn(
+      'Invalid BASE_URL configured for Stripe billing portal redirect. Falling back to http://localhost:3000',
+      error,
+    );
+    return 'http://localhost:3000';
+  }
+}
+
+export const MISSING_STRIPE_CUSTOMER_ERROR = 'Team is missing a Stripe customer.';
+
 export async function createCustomerPortalSession(team: Team) {
-  if (!team.stripeCustomerId || !team.stripeProductId) {
-    redirect('/pricing');
+  if (!team.stripeCustomerId) {
+    throw new Error(MISSING_STRIPE_CUSTOMER_ERROR);
   }
 
-  let configuration: Stripe.BillingPortal.Configuration;
-  const configurations = await stripe.billingPortal.configurations.list();
-
-  if (configurations.data.length > 0) {
-    configuration = configurations.data[0];
-  } else {
-    const product = await stripe.products.retrieve(team.stripeProductId);
-    if (!product.active) {
-      throw new Error("Team's product is not active in Stripe");
-    }
-
-    const prices = await stripe.prices.list({
-      product: product.id,
-      active: true,
-    });
-    if (prices.data.length === 0) {
-      throw new Error("No active prices found for the team's product");
-    }
-
-    configuration = await stripe.billingPortal.configurations.create({
-      business_profile: {
-        headline: 'Manage your subscription',
-      },
-      features: {
-        subscription_update: {
-          enabled: true,
-          default_allowed_updates: ['price', 'quantity', 'promotion_code'],
-          proration_behavior: 'create_prorations',
-          products: [
-            {
-              product: product.id,
-              prices: prices.data.map((price) => price.id),
-            },
-          ],
-        },
-        subscription_cancel: {
-          enabled: true,
-          mode: 'at_period_end',
-          cancellation_reason: {
-            enabled: true,
-            options: [
-              'too_expensive',
-              'missing_features',
-              'switched_service',
-              'unused',
-              'other',
-            ],
-          },
-        },
-      },
-    });
-  }
-
-  return stripe.billingPortal.sessions.create({
+  const sessionParams: Stripe.BillingPortal.SessionCreateParams = {
     customer: team.stripeCustomerId,
-    return_url: `${process.env.BASE_URL}/dashboard`,
-    configuration: configuration.id,
-  });
+    return_url: `${resolveBaseUrl()}/dashboard`,
+  };
+
+  const configuredPortalId = process.env.STRIPE_BILLING_PORTAL_CONFIGURATION_ID;
+  if (configuredPortalId) {
+    sessionParams.configuration = configuredPortalId;
+  }
+
+  return stripe.billingPortal.sessions.create(sessionParams);
 }
 
 export async function handleSubscriptionChange(
