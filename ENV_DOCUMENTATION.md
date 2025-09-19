@@ -80,6 +80,20 @@ NEXT_PUBLIC_BASE_URL="https://your-domain.com"
 BASE_URL="https://your-domain.com"
 ```
 
+### Stripe Billing Portal
+
+If you have a specific Billing Portal configuration in Stripe that exposes
+upgrade, downgrade, or cancellation options, provide its identifier so the app
+can send customers directly to that experience when they manage their
+subscription:
+
+```
+STRIPE_BILLING_PORTAL_CONFIGURATION_ID="bpc_12345"
+```
+
+If this variable is not supplied, the default configuration defined in your
+Stripe dashboard will be used.
+
 ## Troubleshooting
 
 If you encounter the "AI Agent endpoint not configured" error:

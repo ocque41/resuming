@@ -3,41 +3,25 @@
 
 import { Button } from '@/components/ui/button';
 import { Loader2 } from 'lucide-react';
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useManageSubscription } from '@/hooks/use-manage-subscription';
 
-export default function BillingButton({ variant = "primary" }) {
-  const router = useRouter();
-  const [isLoading, setIsLoading] = useState(false);
+interface BillingButtonProps {
+  variant?: 'primary' | 'secondary';
+}
 
-  const handleBilling = async () => {
-    setIsLoading(true);
-    try {
-      const res = await fetch('/api/stripe/portal', { method: 'POST' });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.url) {
-          window.location.href = data.url;
-          return;
-        }
-      }
-      router.push('/dashboard/pricing');
-    } catch (error) {
-      console.error('Failed to open billing portal:', error);
-      router.push('/dashboard/pricing');
-    } finally {
-      setIsLoading(false);
-    }
-  };
+export default function BillingButton({ variant = 'primary' }: BillingButtonProps) {
+  const { openCustomerPortal, isLoading } = useManageSubscription({
+    fallbackPath: '/dashboard/pricing',
+  });
 
-  const buttonStyles = variant === "primary"
-    ? "bg-[#584235] hover:bg-[#6b4f3b] text-white"
-    : "bg-gray-300 text-black";
+  const buttonStyles = variant === 'primary'
+    ? 'bg-[#584235] hover:bg-[#6b4f3b] text-white'
+    : 'bg-gray-300 text-black';
 
   return (
     <Button
-      onClick={handleBilling}
-      className={`${buttonStyles} py-2 px-4 rounded-md ${isLoading ? "opacity-50 cursor-not-allowed" : ""}`}
+      onClick={openCustomerPortal}
+      className={`${buttonStyles} py-2 px-4 rounded-md ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
       disabled={isLoading}
     >
       {isLoading ? (
@@ -46,7 +30,7 @@ export default function BillingButton({ variant = "primary" }) {
           Redirecting...
         </>
       ) : (
-        'Manage Subscription'
+        'Manage My Subscription'
       )}
     </Button>
   );
