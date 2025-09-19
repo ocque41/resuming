@@ -2,6 +2,7 @@
 
 import { useCallback, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useToast } from '@/hooks/use-toast';
 
 interface UseManageSubscriptionOptions {
   fallbackPath?: string;
@@ -17,6 +18,7 @@ export function useManageSubscription(
 ): UseManageSubscriptionResult {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
+  const { toast } = useToast();
 
   const openCustomerPortal = useCallback(async () => {
     setIsLoading(true);
@@ -24,23 +26,62 @@ export function useManageSubscription(
     try {
       const response = await fetch('/api/stripe/portal', { method: 'POST' });
 
-      if (response.ok) {
-        const data = await response.json();
+      if (!response.ok) {
+        let errorMessage = 'Please try again or contact support.';
 
-        if (data?.url) {
-          window.location.href = data.url;
-          return;
+        try {
+          const data = await response.json();
+          if (data?.error && typeof data.error === 'string') {
+            errorMessage = data.error;
+          }
+        } catch (parseError) {
+          console.error('Failed to parse billing portal error response:', parseError);
         }
+
+        toast({
+          title: 'Unable to open the billing portal',
+          description: errorMessage,
+          variant: 'destructive',
+        });
+
+        if (fallbackPath) {
+          router.push(fallbackPath);
+        }
+
+        return;
       }
 
-      router.push(fallbackPath);
+      const data = await response.json();
+
+      if (data?.url) {
+        window.location.href = data.url;
+        return;
+      }
+
+      toast({
+        title: 'Unable to open the billing portal',
+        description: 'Stripe did not return a redirect URL.',
+        variant: 'destructive',
+      });
+
+      if (fallbackPath) {
+        router.push(fallbackPath);
+      }
     } catch (error) {
       console.error('Failed to open billing portal:', error);
-      router.push(fallbackPath);
+      toast({
+        title: 'Unable to open the billing portal',
+        description: 'An unexpected error occurred. Please try again.',
+        variant: 'destructive',
+      });
+
+      if (fallbackPath) {
+        router.push(fallbackPath);
+      }
     } finally {
       setIsLoading(false);
     }
-  }, [fallbackPath, router]);
+  }, [fallbackPath, router, toast]);
 
   return { openCustomerPortal, isLoading };
 }

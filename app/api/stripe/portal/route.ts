@@ -5,22 +5,25 @@ import {
   createCustomerPortalSession,
 } from '@/lib/payments/stripe';
 
-export async function POST() {
+type PortalSessionResult =
+  | { url: string }
+  | { error: { message: string; status: number } };
+
+async function createPortalSession(): Promise<PortalSessionResult> {
   try {
     const user = await getUser();
     if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return { error: { message: 'Unauthorized', status: 401 } };
     }
 
     const teamData = await getTeamForUser(user.id);
     if (!teamData) {
-      return NextResponse.json({ error: 'Team not found' }, { status: 404 });
+      return { error: { message: 'Team not found', status: 404 } };
     }
 
-    // If teamData is an array, use the first element
     const teamObj = Array.isArray(teamData) ? teamData[0] : teamData;
     if (!teamObj) {
-      return NextResponse.json({ error: 'Team not found' }, { status: 404 });
+      return { error: { message: 'Team not found', status: 404 } };
     }
 
     const {
@@ -34,6 +37,7 @@ export async function POST() {
       planName,
       subscriptionStatus,
     } = teamObj;
+
     const team = {
       id,
       name,
@@ -47,7 +51,17 @@ export async function POST() {
     };
 
     const session = await createCustomerPortalSession(team);
-    return NextResponse.json({ url: session.url });
+
+    if (!session.url) {
+      return {
+        error: {
+          message: 'Stripe did not return a billing portal URL.',
+          status: 502,
+        },
+      };
+    }
+
+    return { url: session.url };
   } catch (error) {
     console.error('Error creating customer portal session:', error);
 
@@ -55,12 +69,40 @@ export async function POST() {
       error instanceof Error &&
       error.message === MISSING_STRIPE_CUSTOMER_ERROR
     ) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
+      return { error: { message: error.message, status: 400 } };
     }
 
+    return {
+      error: {
+        message: 'Failed to create customer portal session',
+        status: 500,
+      },
+    };
+  }
+}
+
+export async function POST() {
+  const result = await createPortalSession();
+
+  if ('error' in result) {
     return NextResponse.json(
-      { error: 'Failed to create customer portal session' },
-      { status: 500 }
+      { error: result.error.message },
+      { status: result.error.status },
     );
   }
+
+  return NextResponse.json({ url: result.url });
+}
+
+export async function GET() {
+  const result = await createPortalSession();
+
+  if ('error' in result) {
+    return NextResponse.json(
+      { error: result.error.message },
+      { status: result.error.status },
+    );
+  }
+
+  return NextResponse.redirect(result.url, { status: 303 });
 }

@@ -4,6 +4,7 @@ import { Team } from '@/lib/db/schema';
 import {
   getTeamByStripeCustomerId,
   getUser,
+  setTeamStripeCustomerId,
   updateTeamSubscription,
 } from '@/lib/db/queries.server';
 
@@ -76,12 +77,33 @@ function resolveBaseUrl() {
 export const MISSING_STRIPE_CUSTOMER_ERROR = 'Team is missing a Stripe customer.';
 
 export async function createCustomerPortalSession(team: Team) {
-  if (!team.stripeCustomerId) {
+  let stripeCustomerId = team.stripeCustomerId;
+
+  if (!stripeCustomerId && team.stripeSubscriptionId) {
+    try {
+      const subscription = await stripe.subscriptions.retrieve(
+        team.stripeSubscriptionId,
+      );
+      const subscriptionCustomer = subscription.customer;
+
+      if (typeof subscriptionCustomer === 'string') {
+        stripeCustomerId = subscriptionCustomer;
+        await setTeamStripeCustomerId(team.id, subscriptionCustomer);
+      }
+    } catch (error) {
+      console.error(
+        'Failed to recover Stripe customer ID from subscription',
+        error,
+      );
+    }
+  }
+
+  if (!stripeCustomerId) {
     throw new Error(MISSING_STRIPE_CUSTOMER_ERROR);
   }
 
   const sessionParams: Stripe.BillingPortal.SessionCreateParams = {
-    customer: team.stripeCustomerId,
+    customer: stripeCustomerId,
     return_url: `${resolveBaseUrl()}/dashboard`,
   };
 
@@ -90,7 +112,13 @@ export async function createCustomerPortalSession(team: Team) {
     sessionParams.configuration = configuredPortalId;
   }
 
-  return stripe.billingPortal.sessions.create(sessionParams);
+  const session = await stripe.billingPortal.sessions.create(sessionParams);
+
+  if (!session.url) {
+    throw new Error('Stripe did not return a billing portal URL.');
+  }
+
+  return session;
 }
 
 export async function handleSubscriptionChange(
