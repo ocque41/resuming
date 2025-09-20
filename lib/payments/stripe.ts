@@ -76,7 +76,14 @@ function resolveBaseUrl() {
 
 export const MISSING_STRIPE_CUSTOMER_ERROR = 'Team is missing a Stripe customer.';
 
-export async function createCustomerPortalSession(team: Team) {
+interface CreateCustomerPortalSessionOptions {
+  userEmail?: string;
+}
+
+export async function createCustomerPortalSession(
+  team: Team,
+  { userEmail }: CreateCustomerPortalSessionOptions = {},
+) {
   let stripeCustomerId = team.stripeCustomerId;
 
   if (!stripeCustomerId && team.stripeSubscriptionId) {
@@ -95,6 +102,23 @@ export async function createCustomerPortalSession(team: Team) {
         'Failed to recover Stripe customer ID from subscription',
         error,
       );
+    }
+  }
+
+  if (!stripeCustomerId && userEmail) {
+    try {
+      const customerSearch = await stripe.customers.list({
+        email: userEmail,
+        limit: 1,
+      });
+
+      const matchingCustomer = customerSearch.data[0];
+      if (matchingCustomer?.id) {
+        stripeCustomerId = matchingCustomer.id;
+        await setTeamStripeCustomerId(team.id, matchingCustomer.id);
+      }
+    } catch (error) {
+      console.error('Failed to recover Stripe customer ID from email lookup', error);
     }
   }
 

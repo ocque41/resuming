@@ -50,7 +50,8 @@ async function createPortalSession(): Promise<PortalSessionResult> {
       subscriptionStatus,
     };
 
-    const session = await createCustomerPortalSession(team);
+    const userEmail = typeof user.email === 'string' ? user.email : undefined;
+    const session = await createCustomerPortalSession(team, { userEmail });
 
     if (!session.url) {
       return {
