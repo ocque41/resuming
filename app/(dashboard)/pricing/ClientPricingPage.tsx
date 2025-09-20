@@ -1,9 +1,9 @@
 "use client";
 
-import { Check, Loader2, Star } from "lucide-react";
+import { Check, Star } from "lucide-react";
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
-import { useManageSubscription } from "@/hooks/use-manage-subscription";
+import BillingButton from "../dashboard/billing-button";
 
 interface StripePrice {
   id: string;
@@ -38,10 +38,6 @@ interface ClientPricingPageProps {
 
 export default function ClientPricingPage({ prices, products }: ClientPricingPageProps) {
   const router = useRouter();
-  const {
-    openCustomerPortal: handleManageSubscription,
-    isLoading: isManagingSubscription,
-  } = useManageSubscription({ fallbackPath: "/dashboard/pricing" });
   
   // Handle checkout client-side
   const handleCheckout = (priceId: string) => {
@@ -96,20 +92,11 @@ export default function ClientPricingPage({ prices, products }: ClientPricingPag
             className="flex flex-col sm:flex-row sm:items-center gap-4 rounded-xl border border-[#222222] bg-[#0D0D0D] p-4"
             variants={itemVariants}
           >
-            <button
-              onClick={handleManageSubscription}
-              disabled={isManagingSubscription}
-              className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#B4916C] px-5 py-3 font-safiro text-sm uppercase tracking-wide text-[#050505] transition-colors duration-200 hover:bg-[#A3815B] disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {isManagingSubscription ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Redirecting...
-                </>
-              ) : (
-                "Manage My Subscription"
-              )}
-            </button>
+            <BillingButton
+              variant="unstyled"
+              className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[#B4916C] px-5 py-3 font-safiro text-sm uppercase tracking-wide text-[#050505] transition-colors duration-200 hover:bg-[#A3815B] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+              fallbackPath="/dashboard/pricing"
+            />
             <p className="text-sm text-[#C5C2BA] font-borna">
               Visit the Stripe billing portal to cancel, downgrade, or update your plan at any time.
             </p>
