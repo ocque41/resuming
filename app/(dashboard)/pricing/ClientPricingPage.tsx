@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import BillingButton from "../dashboard/billing-button";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
+import { useManageSubscription } from "@/hooks/use-manage-subscription";
 
 interface StripePrice {
   id: string;
@@ -42,9 +43,14 @@ interface ClientPricingPageProps {
 export default function ClientPricingPage({ prices, products }: ClientPricingPageProps) {
   const router = useRouter();
   const { toast } = useToast();
-  const [isCancelling, setIsCancelling] = useState(false);
   const [subscriptionStatus, setSubscriptionStatus] = useState<string | null>(null);
   const [hasStripeSubscription, setHasStripeSubscription] = useState(false);
+  const { openCustomerPortal, isLoading: isOpeningCustomerPortal } = useManageSubscription({
+    fallbackPath: "/dashboard/pricing",
+  });
+
+  const canManageSubscription = hasStripeSubscription ||
+    (subscriptionStatus !== null && subscriptionStatus !== "canceled" && subscriptionStatus !== "unpaid");
 
   useEffect(() => {
     let isMounted = true;
@@ -77,59 +83,18 @@ export default function ClientPricingPage({ prices, products }: ClientPricingPag
     };
   }, []);
 
-  const handleCancelPlan = useCallback(async () => {
-    if (isCancelling) {
-      return;
-    }
-
-    const confirmed = window.confirm("Are you sure you want to cancel your plan?");
-    if (!confirmed) {
-      return;
-    }
-
-    setIsCancelling(true);
-
-    try {
-      const response = await fetch("/api/user/cancel-plan", {
-        method: "POST",
-      });
-
-      const data = await response.json().catch(() => null);
-
-      if (!response.ok) {
-        const errorMessage = data?.error || "Failed to cancel your plan. Please try again.";
-        toast({
-          title: "Cancellation failed",
-          description: errorMessage,
-          variant: "destructive",
-        });
-        return;
-      }
-
-      const status = typeof data?.subscriptionStatus === "string" ? data.subscriptionStatus : "canceled";
-      setSubscriptionStatus(status);
-      setHasStripeSubscription(false);
-
+  const handleManageSubscription = useCallback(async () => {
+    if (!canManageSubscription) {
       toast({
-        title: "Plan cancelled",
-        description: data?.message || "Your subscription has been cancelled.",
-      });
-
-      router.refresh();
-    } catch (error) {
-      console.error("Failed to cancel plan", error);
-      toast({
-        title: "Cancellation failed",
-        description: "An unexpected error occurred. Please try again.",
+        title: "No active subscription",
+        description: "There is no active subscription to manage.",
         variant: "destructive",
       });
-    } finally {
-      setIsCancelling(false);
+      return;
     }
-  }, [isCancelling, router, toast]);
 
-  const canCancel = hasStripeSubscription ||
-    (subscriptionStatus !== null && subscriptionStatus !== "canceled" && subscriptionStatus !== "unpaid");
+    await openCustomerPortal();
+  }, [canManageSubscription, openCustomerPortal, toast]);
   
   // Handle checkout client-side
   const handleCheckout = (priceId: string) => {
@@ -190,23 +155,6 @@ export default function ClientPricingPage({ prices, products }: ClientPricingPag
                 className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[#B4916C] px-5 py-3 font-safiro text-sm uppercase tracking-wide text-[#050505] transition-colors duration-200 hover:bg-[#A3815B] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
                 fallbackPath="/dashboard/pricing"
               />
-              {canCancel && (
-                <Button
-                  onClick={handleCancelPlan}
-                  disabled={isCancelling}
-                  variant="destructive"
-                  className="w-full sm:w-auto"
-                >
-                  {isCancelling ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Cancelling...
-                    </>
-                  ) : (
-                    "Cancel Plan"
-                  )}
-                </Button>
-              )}
             </div>
             <p className="text-sm text-[#C5C2BA] font-borna">
               Visit the Stripe billing portal to cancel, downgrade, or update your plan at any time.
@@ -226,8 +174,32 @@ export default function ClientPricingPage({ prices, products }: ClientPricingPag
             onCheckout={handleCheckout}
           />
         </div>
-        
-        <motion.div 
+
+        <motion.div
+          className="flex flex-col items-center gap-4 max-w-3xl mx-auto text-center"
+          variants={itemVariants}
+        >
+          <p className="text-sm text-[#C5C2BA] font-borna">
+            Need to cancel your plan? Manage your subscription directly through the Stripe customer portal.
+          </p>
+          <Button
+            onClick={handleManageSubscription}
+            disabled={!canManageSubscription || isOpeningCustomerPortal}
+            variant="outline"
+            className="bg-[#111111] border-[#222222] text-[#F9F6EE] hover:bg-[#1A1A1A]"
+          >
+            {isOpeningCustomerPortal ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Opening portal...
+              </>
+            ) : (
+              "Cancel subscription"
+            )}
+          </Button>
+        </motion.div>
+
+        <motion.div
           className="text-center mt-12 p-8 border border-[#222222] rounded-xl bg-[#111111]"
           variants={itemVariants}
         >
