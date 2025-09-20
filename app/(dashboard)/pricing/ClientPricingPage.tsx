@@ -1,9 +1,13 @@
 "use client";
 
-import { Check, Star } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { Check, Loader2, Star } from "lucide-react";
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import BillingButton from "../dashboard/billing-button";
+import { Button } from "@/components/ui/button";
+import { useToast } from "@/hooks/use-toast";
+import { useManageSubscription } from "@/hooks/use-manage-subscription";
 
 interface StripePrice {
   id: string;
@@ -38,6 +42,59 @@ interface ClientPricingPageProps {
 
 export default function ClientPricingPage({ prices, products }: ClientPricingPageProps) {
   const router = useRouter();
+  const { toast } = useToast();
+  const [subscriptionStatus, setSubscriptionStatus] = useState<string | null>(null);
+  const [hasStripeSubscription, setHasStripeSubscription] = useState(false);
+  const { openCustomerPortal, isLoading: isOpeningCustomerPortal } = useManageSubscription({
+    fallbackPath: "/dashboard/pricing",
+  });
+
+  const canManageSubscription = hasStripeSubscription ||
+    (subscriptionStatus !== null && subscriptionStatus !== "canceled" && subscriptionStatus !== "unpaid");
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchSubscription = async () => {
+      try {
+        const response = await fetch("/api/user/subscription");
+        if (!response.ok) {
+          return;
+        }
+
+        const data = await response.json();
+
+        if (!isMounted) {
+          return;
+        }
+
+        const status = typeof data.subscriptionStatus === "string" ? data.subscriptionStatus : null;
+        setSubscriptionStatus(status);
+        setHasStripeSubscription(Boolean(data?.stripeSubscriptionId));
+      } catch (error) {
+        console.error("Failed to load subscription status", error);
+      }
+    };
+
+    fetchSubscription();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const handleManageSubscription = useCallback(async () => {
+    if (!canManageSubscription) {
+      toast({
+        title: "No active subscription",
+        description: "There is no active subscription to manage.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    await openCustomerPortal();
+  }, [canManageSubscription, openCustomerPortal, toast]);
   
   // Handle checkout client-side
   const handleCheckout = (priceId: string) => {
@@ -89,14 +146,16 @@ export default function ClientPricingPage({ prices, products }: ClientPricingPag
             Upgrade or downgrade your plan anytime as your needs evolve.
           </p>
           <motion.div
-            className="flex flex-col sm:flex-row sm:items-center gap-4 rounded-xl border border-[#222222] bg-[#0D0D0D] p-4"
+            className="flex flex-col gap-4 rounded-xl border border-[#222222] bg-[#0D0D0D] p-4"
             variants={itemVariants}
           >
-            <BillingButton
-              variant="unstyled"
-              className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[#B4916C] px-5 py-3 font-safiro text-sm uppercase tracking-wide text-[#050505] transition-colors duration-200 hover:bg-[#A3815B] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
-              fallbackPath="/dashboard/pricing"
-            />
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+              <BillingButton
+                variant="unstyled"
+                className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[#B4916C] px-5 py-3 font-safiro text-sm uppercase tracking-wide text-[#050505] transition-colors duration-200 hover:bg-[#A3815B] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+                fallbackPath="/dashboard/pricing"
+              />
+            </div>
             <p className="text-sm text-[#C5C2BA] font-borna">
               Visit the Stripe billing portal to cancel, downgrade, or update your plan at any time.
             </p>
@@ -115,8 +174,32 @@ export default function ClientPricingPage({ prices, products }: ClientPricingPag
             onCheckout={handleCheckout}
           />
         </div>
-        
-        <motion.div 
+
+        <motion.div
+          className="flex flex-col items-center gap-4 max-w-3xl mx-auto text-center"
+          variants={itemVariants}
+        >
+          <p className="text-sm text-[#C5C2BA] font-borna">
+            Need to cancel your plan? Manage your subscription directly through the Stripe customer portal.
+          </p>
+          <Button
+            onClick={handleManageSubscription}
+            disabled={!canManageSubscription || isOpeningCustomerPortal}
+            variant="outline"
+            className="bg-[#111111] border-[#222222] text-[#F9F6EE] hover:bg-[#1A1A1A]"
+          >
+            {isOpeningCustomerPortal ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Opening portal...
+              </>
+            ) : (
+              "Cancel subscription"
+            )}
+          </Button>
+        </motion.div>
+
+        <motion.div
           className="text-center mt-12 p-8 border border-[#222222] rounded-xl bg-[#111111]"
           variants={itemVariants}
         >
