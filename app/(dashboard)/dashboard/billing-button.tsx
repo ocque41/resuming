@@ -3,50 +3,53 @@
 
 import { Button } from '@/components/ui/button';
 import { Loader2 } from 'lucide-react';
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { cn } from '@/lib/utils';
+import { useManageSubscription } from '@/hooks/use-manage-subscription';
 
-export default function BillingButton({ variant = "primary" }) {
-  const router = useRouter();
-  const [isLoading, setIsLoading] = useState(false);
+interface BillingButtonProps {
+  variant?: 'primary' | 'secondary' | 'unstyled';
+  className?: string;
+  label?: string;
+  loadingLabel?: string;
+  fallbackPath?: string;
+}
 
-  const handleBilling = async () => {
-    setIsLoading(true);
-    try {
-      const res = await fetch('/api/stripe/portal', { method: 'POST' });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.url) {
-          window.location.href = data.url;
-          return;
-        }
-      }
-      router.push('/dashboard/pricing');
-    } catch (error) {
-      console.error('Failed to open billing portal:', error);
-      router.push('/dashboard/pricing');
-    } finally {
-      setIsLoading(false);
-    }
-  };
+export default function BillingButton({
+  variant = 'primary',
+  className,
+  label = 'Manage My Subscription',
+  loadingLabel = 'Redirecting...',
+  fallbackPath = '/dashboard/pricing',
+}: BillingButtonProps) {
+  const { openCustomerPortal, isLoading } = useManageSubscription({
+    fallbackPath,
+  });
 
-  const buttonStyles = variant === "primary"
-    ? "bg-[#584235] hover:bg-[#6b4f3b] text-white"
-    : "bg-gray-300 text-black";
+  const variantClasses =
+    variant === 'primary'
+      ? 'bg-[#584235] hover:bg-[#6b4f3b] text-white'
+      : variant === 'secondary'
+        ? 'bg-gray-300 text-black'
+        : '';
 
   return (
     <Button
-      onClick={handleBilling}
-      className={`${buttonStyles} py-2 px-4 rounded-md ${isLoading ? "opacity-50 cursor-not-allowed" : ""}`}
+      onClick={openCustomerPortal}
+      className={cn(
+        variantClasses,
+        'py-2 px-4 rounded-md',
+        isLoading && 'opacity-50 cursor-not-allowed',
+        className,
+      )}
       disabled={isLoading}
     >
       {isLoading ? (
         <>
           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-          Redirecting...
+          {loadingLabel}
         </>
       ) : (
-        'Manage Subscription'
+        label
       )}
     </Button>
   );
