@@ -5,6 +5,71 @@ import { teams } from "@/lib/db/schema";
 
 type Team = typeof teams.$inferSelect;
 
+function normalizeTeam(data: unknown): Team | null {
+  if (!data) {
+    return null;
+  }
+
+  if (Array.isArray(data)) {
+    for (const item of data) {
+      const normalized = normalizeTeam(item);
+      if (normalized) {
+        return normalized;
+      }
+    }
+    return null;
+  }
+
+  if (typeof data === "object") {
+    const record = data as Record<string, unknown>;
+
+    if (typeof record.id === "number" && typeof record.name === "string") {
+      const createdAt = record.createdAt instanceof Date
+        ? record.createdAt
+        : typeof record.createdAt === "string"
+          ? new Date(record.createdAt)
+          : null;
+
+      const updatedAt = record.updatedAt instanceof Date
+        ? record.updatedAt
+        : typeof record.updatedAt === "string"
+          ? new Date(record.updatedAt)
+          : null;
+
+      if (!createdAt || !updatedAt || Number.isNaN(createdAt.getTime()) || Number.isNaN(updatedAt.getTime())) {
+        return null;
+      }
+
+      const normalized: Team = {
+        id: record.id,
+        name: record.name,
+        createdAt,
+        updatedAt,
+        stripeCustomerId: (record.stripeCustomerId as string | null) ?? null,
+        stripeSubscriptionId: (record.stripeSubscriptionId as string | null) ?? null,
+        stripeProductId: (record.stripeProductId as string | null) ?? null,
+        planName: (record.planName as string | null) ?? null,
+        subscriptionStatus: (record.subscriptionStatus as string | null) ?? null,
+      };
+
+      return normalized;
+    }
+
+    if ("team" in record) {
+      const nested = normalizeTeam(record.team);
+      if (nested) {
+        return nested;
+      }
+    }
+
+    if ("teamMembers" in record) {
+      return normalizeTeam(record.teamMembers);
+    }
+  }
+
+  return null;
+}
+
 export async function POST() {
   try {
     const user = await getUser();
@@ -19,7 +84,11 @@ export async function POST() {
       return NextResponse.json({ error: "Team not found" }, { status: 404 });
     }
 
-    const team = teamData as Team;
+    const team = normalizeTeam(teamData);
+
+    if (!team) {
+      return NextResponse.json({ error: "Team not found" }, { status: 404 });
+    }
 
     if (!team.planName && !team.stripeSubscriptionId) {
       return NextResponse.json({
