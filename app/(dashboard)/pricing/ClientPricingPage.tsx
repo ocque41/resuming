@@ -1,9 +1,12 @@
 "use client";
 
-import { Check, Star } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { Check, Loader2, Star } from "lucide-react";
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
-import BillingButton from "../dashboard/billing-button";
+import { Button } from "@/components/ui/button";
+import { useToast } from "@/hooks/use-toast";
+import { useManageSubscription } from "@/hooks/use-manage-subscription";
 
 interface StripePrice {
   id: string;
@@ -29,6 +32,10 @@ interface PricingCardProps {
   tooltips?: Record<string, string>;
   animationDelay?: number;
   onCheckout: (priceId: string) => void;
+  isCurrentPlan?: boolean;
+  canManageSubscription?: boolean;
+  onManageSubscription?: () => void;
+  isManageLoading?: boolean;
 }
 
 interface ClientPricingPageProps {
@@ -38,6 +45,63 @@ interface ClientPricingPageProps {
 
 export default function ClientPricingPage({ prices, products }: ClientPricingPageProps) {
   const router = useRouter();
+  const { toast } = useToast();
+  const [subscriptionStatus, setSubscriptionStatus] = useState<string | null>(null);
+  const [currentPlanName, setCurrentPlanName] = useState<string | null>(null);
+  const [hasStripeSubscription, setHasStripeSubscription] = useState(false);
+  const { openCustomerPortal, isLoading: isOpeningCustomerPortal } = useManageSubscription({
+    fallbackPath: "/dashboard/pricing",
+  });
+
+  const canManageSubscription = hasStripeSubscription ||
+    (subscriptionStatus !== null && subscriptionStatus !== "canceled" && subscriptionStatus !== "unpaid");
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchSubscription = async () => {
+      try {
+        const response = await fetch("/api/user/subscription");
+        if (!response.ok) {
+          return;
+        }
+
+        const data = await response.json();
+
+        if (!isMounted) {
+          return;
+        }
+
+        const status = typeof data.subscriptionStatus === "string" ? data.subscriptionStatus : null;
+        const planName = typeof data.planName === "string" ? data.planName : null;
+
+        setSubscriptionStatus(status);
+        setCurrentPlanName(planName);
+        setHasStripeSubscription(Boolean(data?.stripeSubscriptionId));
+      } catch (error) {
+        console.error("Failed to load subscription status", error);
+      }
+    };
+
+    fetchSubscription();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const handleManageSubscription = useCallback(async () => {
+    if (!canManageSubscription) {
+      toast({
+        title: "No active subscription",
+        description: "There is no active subscription to manage.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    await openCustomerPortal();
+  }, [canManageSubscription, openCustomerPortal, toast]);
   
   // Handle checkout client-side
   const handleCheckout = (priceId: string) => {
@@ -48,6 +112,7 @@ export default function ClientPricingPage({ prices, products }: ClientPricingPag
   // Ensure we have fallbacks for all data
   const proProduct = products.find((product) => product.name === "Pro") || { id: "pro-fallback", name: "Pro" };
   const proPrice = prices.find((price) => price.productId === proProduct.id) || { id: "price_free", productId: proProduct.id, unitAmount: 0 };
+  const isProCurrentPlan = (currentPlanName ?? "").toLowerCase() === "pro";
 
   // Animation variants
   const containerVariants = {
@@ -88,19 +153,6 @@ export default function ClientPricingPage({ prices, products }: ClientPricingPag
           <p className="text-lg text-[#C5C2BA] font-borna">
             Upgrade or downgrade your plan anytime as your needs evolve.
           </p>
-          <motion.div
-            className="flex flex-col sm:flex-row sm:items-center gap-4 rounded-xl border border-[#222222] bg-[#0D0D0D] p-4"
-            variants={itemVariants}
-          >
-            <BillingButton
-              variant="unstyled"
-              className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[#B4916C] px-5 py-3 font-safiro text-sm uppercase tracking-wide text-[#050505] transition-colors duration-200 hover:bg-[#A3815B] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
-              fallbackPath="/dashboard/pricing"
-            />
-            <p className="text-sm text-[#C5C2BA] font-borna">
-              Visit the Stripe billing portal to cancel, downgrade, or update your plan at any time.
-            </p>
-          </motion.div>
         </motion.section>
 
         <div className="grid md:grid-cols-2 gap-8 justify-center mb-8 max-w-4xl mx-auto">
@@ -113,10 +165,14 @@ export default function ClientPricingPage({ prices, products }: ClientPricingPag
             priceId={proPrice.id}
             animationDelay={0.2}
             onCheckout={handleCheckout}
+            isCurrentPlan={isProCurrentPlan}
+            canManageSubscription={canManageSubscription}
+            onManageSubscription={handleManageSubscription}
+            isManageLoading={isOpeningCustomerPortal}
           />
         </div>
-        
-        <motion.div 
+
+        <motion.div
           className="text-center mt-12 p-8 border border-[#222222] rounded-xl bg-[#111111]"
           variants={itemVariants}
         >
@@ -146,7 +202,11 @@ function PricingCard({
   priceId,
   tooltips,
   animationDelay = 0,
-  onCheckout
+  onCheckout,
+  isCurrentPlan = false,
+  canManageSubscription = false,
+  onManageSubscription,
+  isManageLoading = false
 }: PricingCardProps) {
   const cardVariants = {
     hidden: { opacity: 0, y: 20 },
@@ -201,7 +261,33 @@ function PricingCard({
             /{interval}
           </span>
         </p>
-        
+
+        {isCurrentPlan && (
+          <div className="mt-4 space-y-3 rounded-lg border border-[#222222] bg-[#111111]/80 p-4">
+            <p className="text-sm text-[#C5C2BA] font-borna">
+              Your Current Plan: <span className="text-[#F9F6EE] font-semibold">{name}</span>
+            </p>
+            <Button
+              onClick={() => onManageSubscription?.()}
+              disabled={!canManageSubscription || isManageLoading}
+              variant="outline"
+              className="w-full justify-center border-[#333333] bg-[#111111] text-[#F9F6EE] hover:bg-[#1A1A1A]"
+            >
+              {isManageLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Opening portal...
+                </>
+              ) : (
+                "Cancel subscription"
+              )}
+            </Button>
+            <p className="text-xs text-[#8A8782] font-borna">
+              Manage your billing details anytime through the Stripe customer portal.
+            </p>
+          </div>
+        )}
+
         {highlight && (
           <div className="absolute inset-0 opacity-20 overflow-hidden pointer-events-none">
             <motion.div
@@ -245,16 +331,23 @@ function PricingCard({
           ))}
         </ul>
         <motion.button
-          onClick={() => onCheckout(priceId || "")}
+          onClick={() => {
+            if (isCurrentPlan) {
+              return;
+            }
+
+            onCheckout(priceId || "");
+          }}
+          disabled={isCurrentPlan}
           className={`w-full font-medium px-4 py-3 rounded-lg transition-all duration-300 font-safiro h-12 ${
             highlight
               ? "bg-[#B4916C] hover:bg-[#A3815B] text-[#050505]"
               : "bg-[#222222] hover:bg-[#333333] text-[#F9F6EE] border border-[#333333]"
-          }`}
+          } ${isCurrentPlan ? "cursor-not-allowed opacity-60" : ""}`}
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
         >
-          {highlight ? "Upgrade Now" : "Select Plan"}
+          {isCurrentPlan ? "Current Plan" : highlight ? "Upgrade Now" : "Select Plan"}
         </motion.button>
       </div>
     </motion.div>
