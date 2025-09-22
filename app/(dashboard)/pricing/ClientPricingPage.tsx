@@ -1,9 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Check, Loader2, Star } from "lucide-react";
 import { motion } from "framer-motion";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { useManageSubscription } from "@/hooks/use-manage-subscription";
@@ -31,11 +31,12 @@ interface PricingCardProps {
   priceId?: string;
   tooltips?: Record<string, string>;
   animationDelay?: number;
-  onCheckout: (priceId: string) => void;
+  onCheckout: (priceId: string) => Promise<void> | void;
   isCurrentPlan?: boolean;
   canManageSubscription?: boolean;
   onManageSubscription?: () => void;
   isManageLoading?: boolean;
+  isCheckoutLoading?: boolean;
 }
 
 interface ClientPricingPageProps {
@@ -45,13 +46,17 @@ interface ClientPricingPageProps {
 
 export default function ClientPricingPage({ prices, products }: ClientPricingPageProps) {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { toast } = useToast();
   const [subscriptionStatus, setSubscriptionStatus] = useState<string | null>(null);
   const [currentPlanName, setCurrentPlanName] = useState<string | null>(null);
   const [hasStripeSubscription, setHasStripeSubscription] = useState(false);
+  const [isCheckoutLoading, setIsCheckoutLoading] = useState(false);
   const { openCustomerPortal, isLoading: isOpeningCustomerPortal } = useManageSubscription({
     fallbackPath: "/dashboard/pricing",
   });
+  const hasInitiatedCheckoutRef = useRef(false);
 
   const canManageSubscription = hasStripeSubscription ||
     (subscriptionStatus !== null && subscriptionStatus !== "canceled" && subscriptionStatus !== "unpaid");
@@ -113,10 +118,76 @@ export default function ClientPricingPage({ prices, products }: ClientPricingPag
   }, [canManageSubscription, openCustomerPortal, toast]);
   
   // Handle checkout client-side
-  const handleCheckout = (priceId: string) => {
-    // Redirect to the dashboard pricing page with the priceId
-    router.push(`/dashboard/pricing?priceId=${priceId}`);
-  };
+  const handleCheckout = useCallback(async (priceId: string) => {
+    if (!priceId) {
+      return;
+    }
+
+    const isDashboardPricingPage = pathname?.startsWith("/dashboard/pricing");
+
+    if (!isDashboardPricingPage) {
+      router.push(`/dashboard/pricing?priceId=${priceId}`);
+      return;
+    }
+
+    setIsCheckoutLoading(true);
+
+    try {
+      const formData = new FormData();
+      formData.append("priceId", priceId);
+      formData.append("returnUrl", "/dashboard");
+
+      const response = await fetch("/api/stripe/checkout", {
+        method: "POST",
+        body: formData,
+        headers: {
+          Accept: "application/json",
+        },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: "Failed to initiate checkout" }));
+        throw new Error(errorData.message || "Failed to initiate checkout");
+      }
+
+      const data = await response.json();
+
+      if (data?.url) {
+        window.location.href = data.url;
+        return;
+      }
+
+      throw new Error("Stripe did not return a checkout URL.");
+    } catch (error) {
+      console.error("Failed to initiate checkout", error);
+      toast({
+        title: "Unable to start checkout",
+        description: error instanceof Error ? error.message : "Please try again shortly.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsCheckoutLoading(false);
+    }
+  }, [pathname, router, toast]);
+
+  useEffect(() => {
+    if (!pathname?.startsWith("/dashboard/pricing")) {
+      return;
+    }
+
+    const priceId = searchParams?.get("priceId");
+
+    if (!priceId || hasInitiatedCheckoutRef.current) {
+      return;
+    }
+
+    hasInitiatedCheckoutRef.current = true;
+
+    void (async () => {
+      await handleCheckout(priceId);
+      router.replace("/dashboard/pricing");
+    })();
+  }, [handleCheckout, pathname, router, searchParams]);
 
   // Ensure we have fallbacks for all data
   const proProduct = products.find((product) => product.name === "Pro") || { id: "pro-fallback", name: "Pro" };
@@ -178,6 +249,7 @@ export default function ClientPricingPage({ prices, products }: ClientPricingPag
             canManageSubscription={canManageSubscription}
             onManageSubscription={handleManageSubscription}
             isManageLoading={isOpeningCustomerPortal}
+            isCheckoutLoading={isCheckoutLoading}
           />
         </div>
 
@@ -215,7 +287,8 @@ function PricingCard({
   isCurrentPlan = false,
   canManageSubscription = false,
   onManageSubscription,
-  isManageLoading = false
+  isManageLoading = false,
+  isCheckoutLoading = false,
 }: PricingCardProps) {
   const cardVariants = {
     hidden: { opacity: 0, y: 20 },
@@ -353,18 +426,32 @@ function PricingCard({
           </div>
         ) : (
           <motion.button
-            onClick={() => {
-              onCheckout(priceId || "");
+            onClick={async () => {
+              if (isCheckoutLoading) {
+                return;
+              }
+
+              await onCheckout(priceId || "");
             }}
+            disabled={isCheckoutLoading}
             className={`w-full font-medium px-4 py-3 rounded-lg transition-all duration-300 font-safiro h-12 ${
               highlight
                 ? "bg-[#B4916C] hover:bg-[#A3815B] text-[#050505]"
                 : "bg-[#222222] hover:bg-[#333333] text-[#F9F6EE] border border-[#333333]"
-            }`}
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
+            } ${isCheckoutLoading ? "opacity-80" : ""}`}
+            whileHover={{ scale: isCheckoutLoading ? 1 : 1.02 }}
+            whileTap={{ scale: isCheckoutLoading ? 1 : 0.98 }}
           >
-            {highlight ? "Upgrade Now" : "Select Plan"}
+            {isCheckoutLoading ? (
+              <>
+                <Loader2 className="mr-2 inline h-4 w-4 animate-spin" />
+                Processing...
+              </>
+            ) : highlight ? (
+              "Upgrade Now"
+            ) : (
+              "Select Plan"
+            )}
           </motion.button>
         )}
       </div>

@@ -1,134 +1,99 @@
-import { redirect } from "next/navigation";
-import { getUser, getTeamForUser, getActivityLogs } from "@/lib/db/queries.server";
-import { AlertTriangle, ArrowLeft } from "lucide-react";
-import { getStripePrices, getStripeProducts } from "@/lib/payments/stripe";
-import PremiumPageLayout from "@/components/PremiumPageLayout";
-import Link from "next/link";
-import { Button } from "@/components/ui/button";
 import { Suspense } from "react";
-import PricingPageSkeleton from "./PricingPageSkeleton";
-import PricingPageClient from "./PricingPageClient";
-import DirectPricingStatus from "./DirectPricingStatus";
+import { getStripePrices, getStripeProducts } from "@/lib/payments/stripe";
+import ClientPricingPage from "../../pricing/ClientPricingPage";
+import { PageTransition } from "@/components/ui/page-transition";
 
-// Define types for data
-interface ActivityLog {
-  id: number;
-  action: string;
-  timestamp: Date;
-  ipAddress: string | null;
-  userName: string | null;
-  [key: string]: any;
+interface StripePrice {
+  id: string;
+  productId: string;
+  unitAmount: number | null;
+  currency?: string;
+  interval?: string;
+  trialPeriodDays?: number | null;
 }
 
-// Define team data structure based on the error message
-interface TeamData {
-  teamMembers: {
-    team?: {
-      planName?: string;
-      id: number;
-      [key: string]: any;
-    };
-    user: {
-      id: any;
-      name: any;
-      email: any;
-    }[];
-    [key: string]: any;
-  }[];
-  [key: string]: any;
+interface StripeProduct {
+  id: string;
+  name: string;
 }
 
-// Create fallback data for static rendering
-const fallbackPrices = [
-  { id: "price_pro_fallback", productId: "pro-fallback", unitAmount: 0, interval: 'week' }
+const FALLBACK_PRICES: StripePrice[] = [
+  {
+    id: "price_pro_fallback",
+    productId: "pro-fallback",
+    unitAmount: 4900,
+    currency: "usd",
+    interval: "month",
+    trialPeriodDays: null,
+  },
 ];
 
-const fallbackProducts = [
-  { id: "pro-fallback", name: "Pro" }
+const FALLBACK_PRODUCTS: StripeProduct[] = [
+  { id: "pro-fallback", name: "Pro" },
 ];
 
-// Revalidate prices every hour
 export const revalidate = 3600;
 
-export default async function DashboardPricingPage() {
+async function loadPricingData(): Promise<{ prices: StripePrice[]; products: StripeProduct[] }> {
+  let prices: StripePrice[] = FALLBACK_PRICES;
+  let products: StripeProduct[] = FALLBACK_PRODUCTS;
+
   try {
-    // Get current user
-    const user = await getUser();
-    if (!user) {
-      redirect('/sign-in');
+    const [fetchedPrices, fetchedProducts] = await Promise.all([
+      getStripePrices(),
+      getStripeProducts(),
+    ]);
+
+    if (Array.isArray(fetchedPrices) && fetchedPrices.length > 0) {
+      prices = fetchedPrices;
     }
 
-    // Get required data for the page
-    const teamData = user ? await getTeamForUser(user.id) as unknown as TeamData : null;
-    
-    // Get activity logs for the team menu if available
-    let activityLogs: ActivityLog[] = [];
-    try {
-      activityLogs = await getActivityLogs() as ActivityLog[];
-    } catch (error) {
-      console.error("Error fetching activity logs:", error);
+    if (Array.isArray(fetchedProducts) && fetchedProducts.length > 0) {
+      products = fetchedProducts;
     }
-    
-    // Log the team plan data to see what's being provided to the client
-    console.log("Server-side team data:", {
-      planName: teamData?.planName,
-      userId: user.id,
-      hasTeam: !!teamData
-    });
-    
-    // Safely fetch data with fallbacks
-    let pricingError = null;
-    let prices = [];
-    let products = [];
-    
-    try {
-      const [pricesData, productsData] = await Promise.all([
-        getStripePrices(),
-        getStripeProducts()
-      ]);
-      
-      prices = pricesData;
-      products = productsData;
-    } catch (error) {
-      console.error("Error fetching pricing data:", error);
-      pricingError = String(error);
-    }
-
-    return (
-      <PremiumPageLayout
-        title="Upgrade Your Plan"
-        subtitle="Choose the plan that fits your needs"
-        withGradientBackground
-        withScrollIndicator
-        animation="fade"
-        maxWidth="6xl"
-      >
-        <Suspense fallback={<PricingPageSkeleton />}>
-          {/* Use our new direct status component */}
-          <DirectPricingStatus initialPlan={teamData?.planName} />
-          
-          {/* Hidden for debugging - old component 
-          <PricingPageClient 
-            prices={prices} 
-            products={products} 
-            pricingError={pricingError}
-          />
-          */}
-        </Suspense>
-      </PremiumPageLayout>
-    );
   } catch (error) {
-    console.error("Error rendering dashboard pricing page:", error);
-    // Fallback UI in case of any error
-    return (
-      <div className="flex flex-col items-center justify-center min-h-screen bg-[#050505] text-[#F9F6EE] p-6">
-        <AlertTriangle className="h-12 w-12 text-[#B4916C] mb-4" />
-        <h1 className="text-3xl font-bold mb-4 text-[#F9F6EE] font-safiro">Pricing Plans</h1>
-        <p className="text-lg text-[#C5C2BA] font-borna mb-8 text-center max-w-md">
-          We're experiencing some technical difficulties. Please try again later or contact support.
-        </p>
-        {/* Intentionally omit navigation links on this page */}
-      </div>
-    );
+    console.error("Error loading Stripe pricing data:", error);
   }
-} 
+
+  return { prices, products };
+}
+
+export default async function DashboardPricingPage() {
+  const { prices, products } = await loadPricingData();
+
+  return (
+    <PageTransition>
+      <div className="mx-auto w-full max-w-5xl px-4 pb-16 pt-12">
+        <Suspense fallback={<PricingPageSkeleton />}>
+          <ClientPricingPage prices={prices} products={products} />
+        </Suspense>
+      </div>
+    </PageTransition>
+  );
+}
+
+function PricingPageSkeleton() {
+  return (
+    <div className="space-y-12 animate-pulse">
+      <div className="space-y-4">
+        <div className="h-12 w-3/4 rounded-lg bg-[#111111]" />
+        <div className="h-5 w-1/2 rounded-lg bg-[#111111]" />
+        <div className="h-5 w-2/3 rounded-lg bg-[#111111]" />
+      </div>
+
+      <div className="grid gap-6 md:grid-cols-2">
+        {[0, 1].map((key) => (
+          <div key={key} className="overflow-hidden rounded-xl border border-[#222222] bg-[#111111]">
+            <div className="h-28 bg-[#0D0D0D]" />
+            <div className="space-y-4 p-6">
+              {[0, 1, 2, 3].map((line) => (
+                <div key={line} className="h-4 w-full rounded bg-[#161616]" />
+              ))}
+              <div className="h-10 w-full rounded bg-[#161616]" />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
