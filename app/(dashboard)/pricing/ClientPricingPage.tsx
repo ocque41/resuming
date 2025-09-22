@@ -100,7 +100,16 @@ export default function ClientPricingPage({ prices, products }: ClientPricingPag
       return;
     }
 
-    await openCustomerPortal();
+    try {
+      await openCustomerPortal();
+    } catch (error) {
+      console.error("Failed to open customer portal", error);
+      toast({
+        title: "Unable to open customer portal",
+        description: "Please try again in a moment or contact support if the issue persists.",
+        variant: "destructive",
+      });
+    }
   }, [canManageSubscription, openCustomerPortal, toast]);
   
   // Handle checkout client-side
@@ -279,7 +288,7 @@ function PricingCard({
                   Opening portal...
                 </>
               ) : (
-                "Cancel subscription"
+                "Cancel my plan"
               )}
             </Button>
             <p className="text-xs text-[#8A8782] font-borna">
