@@ -276,23 +276,8 @@ function PricingCard({
             <p className="text-sm text-[#C5C2BA] font-borna">
               Your Current Plan: <span className="text-[#F9F6EE] font-semibold">{name}</span>
             </p>
-            <Button
-              onClick={() => onManageSubscription?.()}
-              disabled={!canManageSubscription || isManageLoading}
-              variant="outline"
-              className="w-full justify-center border-[#333333] bg-[#111111] text-[#F9F6EE] hover:bg-[#1A1A1A]"
-            >
-              {isManageLoading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Opening portal...
-                </>
-              ) : (
-                "Cancel my plan"
-              )}
-            </Button>
             <p className="text-xs text-[#8A8782] font-borna">
-              Manage your billing details anytime through the Stripe customer portal.
+              You can manage or cancel your subscription at any time.
             </p>
           </div>
         )}
@@ -339,25 +324,49 @@ function PricingCard({
             </li>
           ))}
         </ul>
-        <motion.button
-          onClick={() => {
-            if (isCurrentPlan) {
-              return;
-            }
+        {isCurrentPlan ? (
+          <div className="space-y-2">
+            <Button
+              onClick={() => {
+                if (!isCurrentPlan) {
+                  return;
+                }
 
-            onCheckout(priceId || "");
-          }}
-          disabled={isCurrentPlan}
-          className={`w-full font-medium px-4 py-3 rounded-lg transition-all duration-300 font-safiro h-12 ${
-            highlight
-              ? "bg-[#B4916C] hover:bg-[#A3815B] text-[#050505]"
-              : "bg-[#222222] hover:bg-[#333333] text-[#F9F6EE] border border-[#333333]"
-          } ${isCurrentPlan ? "cursor-not-allowed opacity-60" : ""}`}
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-        >
-          {isCurrentPlan ? "Current Plan" : highlight ? "Upgrade Now" : "Select Plan"}
-        </motion.button>
+                onManageSubscription?.();
+              }}
+              disabled={!canManageSubscription || isManageLoading}
+              variant="outline"
+              className="w-full justify-center border-[#333333] bg-[#111111] text-[#F9F6EE] hover:bg-[#1A1A1A]"
+            >
+              {isManageLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Opening portal...
+                </>
+              ) : (
+                "Cancel my plan"
+              )}
+            </Button>
+            <p className="text-xs text-[#8A8782] font-borna">
+              Manage your billing details anytime through the Stripe customer portal.
+            </p>
+          </div>
+        ) : (
+          <motion.button
+            onClick={() => {
+              onCheckout(priceId || "");
+            }}
+            className={`w-full font-medium px-4 py-3 rounded-lg transition-all duration-300 font-safiro h-12 ${
+              highlight
+                ? "bg-[#B4916C] hover:bg-[#A3815B] text-[#050505]"
+                : "bg-[#222222] hover:bg-[#333333] text-[#F9F6EE] border border-[#333333]"
+            }`}
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+          >
+            {highlight ? "Upgrade Now" : "Select Plan"}
+          </motion.button>
+        )}
       </div>
     </motion.div>
   );
