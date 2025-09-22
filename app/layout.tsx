@@ -6,7 +6,7 @@ import { getUser } from '@/lib/db/queries.server';
 import { ThemeProvider } from 'app/theme-provider';
 import { I18nProvider } from '@/components/i18n-provider';
 import { Inter } from "next/font/google";
-import { cn } from '@/lib/utils';
+import Script from 'next/script';
 
 export const metadata: Metadata = {
   title: 'Resuming - The First Engineer-Recruiter AI Platform | Optimize Your Technical Career',
@@ -112,18 +112,22 @@ export default function RootLayout({
           rel="stylesheet"
           href="https://unpkg.com/franken-ui@1.1.0/dist/css/core.min.css"
         />
-        <script src="https://unpkg.com/franken-ui@1.1.0/dist/js/core.iife.js" />
-        <script src="https://unpkg.com/franken-ui@1.1.0/dist/js/icon.iife.js" />
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `
-              document.addEventListener("uikit:init", () => {
-                // Initialize Franken UI components here
-                console.log("Franken UI initialized");
-              });
-            `,
-          }}
+        <Script
+          src="https://unpkg.com/franken-ui@1.1.0/dist/js/core.iife.js"
+          strategy="afterInteractive"
         />
+        <Script
+          src="https://unpkg.com/franken-ui@1.1.0/dist/js/icon.iife.js"
+          strategy="afterInteractive"
+        />
+        <Script id="franken-ui-init" strategy="afterInteractive">
+          {`
+            document.addEventListener("uikit:init", () => {
+              // Initialize Franken UI components here
+              console.log("Franken UI initialized");
+            });
+          `}
+        </Script>
         
         {/* AI-specific meta tags */}
         <meta name="ai-content-type" content="ai-platform, career-tools, resume-optimization, job-matching" />

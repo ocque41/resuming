@@ -263,4 +263,6 @@ const TailoringJob = memo(
   }
 );
 
-export default TailoringJob; 
+TailoringJob.displayName = 'TailoringJob';
+
+export default TailoringJob;
