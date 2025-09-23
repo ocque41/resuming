@@ -82,6 +82,23 @@ interface CreateCustomerPortalSessionOptions {
   userEmail?: string;
 }
 
+async function findActiveBillingPortalConfigurationId() {
+  try {
+    const configurations = await stripe.billingPortal.configurations.list({
+      limit: 20,
+    });
+
+    const activeConfiguration = configurations.data.find(
+      (configuration) => configuration.active,
+    );
+
+    return activeConfiguration?.id ?? null;
+  } catch (error) {
+    console.error('Failed to list Stripe billing portal configurations', error);
+    return null;
+  }
+}
+
 export async function createCustomerPortalSession(
   team: Team,
   { userEmail }: CreateCustomerPortalSessionOptions = {},
@@ -151,10 +168,28 @@ export async function createCustomerPortalSession(
         'Stripe billing portal configuration missing. Provide STRIPE_BILLING_PORTAL_CONFIGURATION_ID or configure a default portal in Stripe.',
         error,
       );
-      throw new Error(MISSING_STRIPE_PORTAL_CONFIGURATION_ERROR);
-    }
 
-    throw error;
+      const fallbackConfigurationId = await findActiveBillingPortalConfigurationId();
+
+      if (fallbackConfigurationId) {
+        try {
+          session = await stripe.billingPortal.sessions.create({
+            ...sessionParams,
+            configuration: fallbackConfigurationId,
+          });
+        } catch (retryError) {
+          console.error(
+            'Retrying billing portal session creation with fallback configuration failed.',
+            retryError,
+          );
+          throw new Error(MISSING_STRIPE_PORTAL_CONFIGURATION_ERROR);
+        }
+      } else {
+        throw new Error(MISSING_STRIPE_PORTAL_CONFIGURATION_ERROR);
+      }
+    } else {
+      throw error;
+    }
   }
 
   if (!session.url) {

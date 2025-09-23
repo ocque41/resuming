@@ -15,3 +15,10 @@
 
 ## Risks
 - Local `npm run build` currently requires numerous third-party environment variables (Postgres, OpenAI, Resend, Upstash). Without reachable services, pre-rendering admin pages may still fail despite placeholder values.
+
+# Sprint 3 Plan
+
+## Harden Stripe customer portal creation
+
+- [x] **AC1:** When Stripe indicates no default billing portal configuration, the dashboard surfaces a clear, user-visible error rather than silently failing.
+- [x] **AC2:** If any active Stripe billing portal configuration exists, the API automatically re-attempts portal session creation using it so customers can manage subscriptions without manual env overrides.
