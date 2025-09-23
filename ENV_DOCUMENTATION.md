@@ -91,8 +91,11 @@ subscription:
 STRIPE_BILLING_PORTAL_CONFIGURATION_ID="bpc_12345"
 ```
 
-If this variable is not supplied, the default configuration defined in your
-Stripe dashboard will be used.
+When this variable is not supplied, the application will now create a minimal
+configuration on-demand via the Stripe API, cache its identifier for the life
+of the process (and assign it to `STRIPE_BILLING_PORTAL_CONFIGURATION_ID` at
+runtime), and reuse that configuration for future portal sessions. Persist the
+value in your environment if you need to reuse it across deployments.
 
 ## Troubleshooting
 

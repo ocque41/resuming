@@ -12,6 +12,11 @@ export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: '2024-06-20',
 });
 
+let cachedBillingPortalConfigurationId =
+  process.env.STRIPE_BILLING_PORTAL_CONFIGURATION_ID ?? null;
+let pendingBillingPortalConfigurationCreation: Promise<string | null> | null =
+  null;
+
 export async function createCheckoutSession({
   team,
   priceId,
@@ -82,7 +87,63 @@ interface CreateCustomerPortalSessionOptions {
   userEmail?: string;
 }
 
+async function createBillingPortalConfiguration() {
+  if (pendingBillingPortalConfigurationCreation) {
+    return pendingBillingPortalConfigurationCreation;
+  }
+
+  pendingBillingPortalConfigurationCreation = (async () => {
+    try {
+      const baseUrl = resolveBaseUrl();
+      const configuration = await stripe.billingPortal.configurations.create({
+        business_profile: {
+          privacy_policy_url: `${baseUrl}/privacy`,
+          terms_of_service_url: `${baseUrl}/terms`,
+        },
+        default_return_url: `${baseUrl}/dashboard`,
+        features: {
+          customer_update: {
+            allowed_updates: ['email'],
+            enabled: true,
+          },
+          invoice_history: {
+            enabled: true,
+          },
+          payment_method_update: {
+            enabled: true,
+          },
+          subscription_cancel: {
+            enabled: true,
+            mode: 'at_period_end',
+          },
+          subscription_update: {
+            default_allowed_updates: [],
+            enabled: false,
+            products: [],
+          },
+        },
+      });
+
+      cachedBillingPortalConfigurationId = configuration.id;
+      process.env.STRIPE_BILLING_PORTAL_CONFIGURATION_ID = configuration.id;
+
+      return configuration.id;
+    } catch (error) {
+      console.error('Failed to create Stripe billing portal configuration', error);
+      return null;
+    } finally {
+      pendingBillingPortalConfigurationCreation = null;
+    }
+  })();
+
+  return pendingBillingPortalConfigurationCreation;
+}
+
 async function findActiveBillingPortalConfigurationId() {
+  if (cachedBillingPortalConfigurationId) {
+    return cachedBillingPortalConfigurationId;
+  }
+
   try {
     const configurations = await stripe.billingPortal.configurations.list({
       limit: 20,
@@ -92,7 +153,13 @@ async function findActiveBillingPortalConfigurationId() {
       (configuration) => configuration.active,
     );
 
-    return activeConfiguration?.id ?? null;
+    if (activeConfiguration?.id) {
+      cachedBillingPortalConfigurationId = activeConfiguration.id;
+      process.env.STRIPE_BILLING_PORTAL_CONFIGURATION_ID = activeConfiguration.id;
+      return activeConfiguration.id;
+    }
+
+    return await createBillingPortalConfiguration();
   } catch (error) {
     console.error('Failed to list Stripe billing portal configurations', error);
     return null;
@@ -150,9 +217,10 @@ export async function createCustomerPortalSession(
     return_url: `${resolveBaseUrl()}/dashboard`,
   };
 
-  const configuredPortalId = process.env.STRIPE_BILLING_PORTAL_CONFIGURATION_ID;
-  if (configuredPortalId) {
-    sessionParams.configuration = configuredPortalId;
+  const resolvedPortalConfigurationId =
+    await findActiveBillingPortalConfigurationId();
+  if (resolvedPortalConfigurationId) {
+    sessionParams.configuration = resolvedPortalConfigurationId;
   }
 
   let session: Stripe.BillingPortal.Session;
@@ -165,7 +233,7 @@ export async function createCustomerPortalSession(
       error.message.includes('No configuration provided')
     ) {
       console.error(
-        'Stripe billing portal configuration missing. Provide STRIPE_BILLING_PORTAL_CONFIGURATION_ID or configure a default portal in Stripe.',
+        'Stripe billing portal configuration missing. Attempting to provision a default configuration automatically.',
         error,
       );
 
@@ -173,6 +241,7 @@ export async function createCustomerPortalSession(
 
       if (fallbackConfigurationId) {
         try {
+          sessionParams.configuration = fallbackConfigurationId;
           session = await stripe.billingPortal.sessions.create({
             ...sessionParams,
             configuration: fallbackConfigurationId,

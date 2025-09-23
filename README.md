@@ -45,6 +45,22 @@ An AI-powered document management system built with Next.js and OpenAI Agents SD
    http://localhost:3000/dashboard/document-processor
    ```
 
+## Billing & Stripe Setup
+
+The dashboard includes a "Manage subscription" entry point backed by Stripe.
+
+1. Provide your Stripe test secret key via `STRIPE_SECRET_KEY` (and optionally
+   set `BASE_URL`/`NEXT_PUBLIC_BASE_URL` so the portal redirects correctly).
+2. Start the development server:
+   ```bash
+   npm run dev
+   ```
+3. Trigger the billing portal from the dashboard (or send an authenticated
+   request to `POST /api/stripe/portal`). When no active billing portal
+   configuration exists in Stripe, the app now provisions one automatically,
+   caches its identifier for subsequent requests, and reuses it without
+   requiring manual setup.
+
 ## Usage
 
 ### Document Upload
