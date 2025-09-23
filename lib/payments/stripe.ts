@@ -75,6 +75,8 @@ function resolveBaseUrl() {
 }
 
 export const MISSING_STRIPE_CUSTOMER_ERROR = 'Team is missing a Stripe customer.';
+export const MISSING_STRIPE_PORTAL_CONFIGURATION_ERROR =
+  'Stripe billing portal configuration is missing.';
 
 interface CreateCustomerPortalSessionOptions {
   userEmail?: string;
@@ -136,7 +138,24 @@ export async function createCustomerPortalSession(
     sessionParams.configuration = configuredPortalId;
   }
 
-  const session = await stripe.billingPortal.sessions.create(sessionParams);
+  let session: Stripe.BillingPortal.Session;
+
+  try {
+    session = await stripe.billingPortal.sessions.create(sessionParams);
+  } catch (error) {
+    if (
+      error instanceof Stripe.errors.StripeInvalidRequestError &&
+      error.message.includes('No configuration provided')
+    ) {
+      console.error(
+        'Stripe billing portal configuration missing. Provide STRIPE_BILLING_PORTAL_CONFIGURATION_ID or configure a default portal in Stripe.',
+        error,
+      );
+      throw new Error(MISSING_STRIPE_PORTAL_CONFIGURATION_ERROR);
+    }
+
+    throw error;
+  }
 
   if (!session.url) {
     throw new Error('Stripe did not return a billing portal URL.');

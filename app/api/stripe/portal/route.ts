@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getUser, getTeamForUser } from '@/lib/db/queries.server';
 import {
   MISSING_STRIPE_CUSTOMER_ERROR,
+  MISSING_STRIPE_PORTAL_CONFIGURATION_ERROR,
   createCustomerPortalSession,
 } from '@/lib/payments/stripe';
 
@@ -66,11 +67,20 @@ async function createPortalSession(): Promise<PortalSessionResult> {
   } catch (error) {
     console.error('Error creating customer portal session:', error);
 
-    if (
-      error instanceof Error &&
-      error.message === MISSING_STRIPE_CUSTOMER_ERROR
-    ) {
-      return { error: { message: error.message, status: 400 } };
+    if (error instanceof Error) {
+      if (error.message === MISSING_STRIPE_CUSTOMER_ERROR) {
+        return { error: { message: error.message, status: 400 } };
+      }
+
+      if (error.message === MISSING_STRIPE_PORTAL_CONFIGURATION_ERROR) {
+        return {
+          error: {
+            message:
+              'Billing portal is not configured yet. Please contact support to manage your subscription.',
+            status: 500,
+          },
+        };
+      }
     }
 
     return {
