@@ -7,6 +7,7 @@ import { ThemeProvider } from 'app/theme-provider';
 import { I18nProvider } from '@/components/i18n-provider';
 import { Inter } from "next/font/google";
 import Script from 'next/script';
+import { TransitionCurtain } from '../components/TransitionCurtain';
 
 export const metadata: Metadata = {
   title: 'Resuming - The First Engineer-Recruiter AI Platform | Optimize Your Technical Career',
@@ -99,7 +100,7 @@ export default function RootLayout({
         <meta name="application-name" content="Resuming" />
         <link rel="canonical" href="https://resuming.ai" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        
+
         {/* Facebook and WhatsApp specific */}
         <meta property="og:image:secure_url" content={`https://resuming.ai/1.png?v=${Date.now()}`} />
         <meta property="og:image:type" content="image/png" />
@@ -107,7 +108,7 @@ export default function RootLayout({
         <meta property="og:image:height" content="630" />
         <meta property="og:updated_time" content={new Date().toISOString()} />
         <meta property="fb:app_id" content="resumingapp" />
-        
+
         <link
           rel="stylesheet"
           href="https://unpkg.com/franken-ui@1.1.0/dist/css/core.min.css"
@@ -128,7 +129,7 @@ export default function RootLayout({
             });
           `}
         </Script>
-        
+
         {/* AI-specific meta tags */}
         <meta name="ai-content-type" content="ai-platform, career-tools, resume-optimization, job-matching" />
         <meta name="ai-audience" content="engineers, developers, technical professionals, recruiters, hiring managers" />
@@ -137,6 +138,7 @@ export default function RootLayout({
         <meta name="ai-data-policy" content="user-data-protected, privacy-first, gdpr-compliant" />
       </head>
       <body className="min-h-[100dvh] bg-[#050505] font-borna">
+        <TransitionCurtain />
         <I18nProvider>
           <ThemeProvider defaultTheme="dark" storageKey="app-theme">
             {children}

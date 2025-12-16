@@ -1,523 +1,328 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
-:root {
-  --background: 0 0% 2%; /* #050505 */
-  --foreground: 0 0% 98%;
-  
-  --card: 0 0% 3%;
-  --card-foreground: 0 0% 98%;
-  
-  --popover: 0 0% 3%;
-  --popover-foreground: 0 0% 98%;
-  
-  --primary: 30 35% 57%; /* #B4916C */
-  --primary-foreground: 0 0% 98%;
-  
-  --secondary: 0 0% 9%;
-  --secondary-foreground: 0 0% 98%;
-  
-  --muted: 0 0% 9%;
-  --muted-foreground: 0 0% 63.9%;
-  
-  --accent: 30 35% 57%; /* #B4916C */
-  --accent-foreground: 0 0% 98%;
-  
-  --destructive: 0 62.8% 30.6%;
-  --destructive-foreground: 0 0% 98%;
-
-  --border: 0 0% 9%;
-  --input: 0 0% 9%;
-  --ring: 0 0% 83.9%;
-  
-  --radius: 0.5rem;
-}
-
-.light {
-  --background: 0 0% 100%;
-  --foreground: 0 0% 3.9%;
-  
-  --card: 0 0% 100%;
-  --card-foreground: 0 0% 3.9%;
-  
-  --popover: 0 0% 100%;
-  --popover-foreground: 0 0% 3.9%;
-  
-  --primary: 30 35% 57%; /* #B4916C */
-  --primary-foreground: 0 0% 98%;
-  
-  --secondary: 0 0% 96.1%;
-  --secondary-foreground: 0 0% 9%;
-  
-  --muted: 0 0% 96.1%;
-  --muted-foreground: 0 0% 45.1%;
-  
-  --accent: 30 35% 57%; /* #B4916C */
-  --accent-foreground: 0 0% 9%;
-  
-  --destructive: 0 84.2% 60.2%;
-  --destructive-foreground: 0 0% 98%;
-
-  --border: 0 0% 89.8%;
-  --input: 0 0% 89.8%;
-  --ring: 0 0% 3.9%;
-}
-
-@layer base {
-  * {
-    @apply border-border;
-    --avatar-gradient-from: 26, 10%, 8%;
-    --avatar-gradient-via: 17, 12%, 13%;
-    --avatar-gradient-to: 34, 25%, 21%;
-  }
-  body {
-    @apply bg-background text-foreground font-borna;
-  }
-  h1, h2, h3 {
-    @apply font-safiro;
-  }
-  p, span, div, a, button, input, textarea, select, option, label, li {
-    @apply font-borna;
-  }
-  :root {
-    --brand-background: #050505;
-    --brand-foreground: #ffffff;
-    --brand-accent: #E8DCC4;
-    --brand-border: #E8DCC4;
-  }
-  :root {
-    --sidebar-background: 0, 0%, 98%;
-    --sidebar-foreground: 240, 5.3%, 26.1%;
-    --sidebar-primary: 240, 5.9%, 10%;
-    --sidebar-primary-foreground: 0, 0%, 98%;
-    --sidebar-accent: 240, 4.8%, 95.9%;
-    --sidebar-accent-foreground: 240, 5.9%, 10%;
-    --sidebar-border: 220, 13%, 91%;
-    --sidebar-ring: 217.2, 91.2%, 59.8%;
-  }
-  .dark {
-    --sidebar-background: 240, 5.9%, 10%;
-    --sidebar-foreground: 240, 4.8%, 95.9%;
-    --sidebar-primary: 224.3, 76.3%, 48%;
-    --sidebar-primary-foreground: 0, 0%, 100%;
-    --sidebar-accent: 240, 3.7%, 15.9%;
-    --sidebar-accent-foreground: 240, 4.8%, 95.9%;
-    --sidebar-border: 240, 3.7%, 15.9%;
-    --sidebar-ring: 217.2, 91.2%, 59.8%;
-  }
-}
-
-/* Optional: Remove this block if Next.js's font loader is handling the font */
-/*
 @font-face {
-  font-family: 'Safiro';
-  src: url('/fonts/Safiro-Medium.otf') format('opentype');
+  font-family: "Drafting Mono";
+  src: url("/DraftingMono-Regular.otf") format("opentype");
+  font-weight: 400;
+  font-style: normal;
   font-display: swap;
 }
-*/
 
-@keyframes bubble-float-1 {
-  0% { transform: translate(0%, 0%) scale(1); opacity: 0.5; }
-  25% { transform: translate(-2%, -2%) scale(1.1); opacity: 0.7; }
-  50% { transform: translate(1%, -3%) scale(0.95); opacity: 0.6; }
-  75% { transform: translate(2%, 2%) scale(1.05); opacity: 0.5; }
-  100% { transform: translate(0%, 0%) scale(1); opacity: 0.5; }
+@font-face {
+  font-family: "Drafting Mono";
+  src: url("/DraftingMono-Italic.otf") format("opentype");
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
 }
 
-@keyframes bubble-float-2 {
-  0% { transform: translate(0%, 0%) scale(0.9); opacity: 0.3; }
-  25% { transform: translate(2%, -2%) scale(1); opacity: 0.5; }
-  50% { transform: translate(-1%, 3%) scale(0.95); opacity: 0.4; }
-  75% { transform: translate(-2%, -1%) scale(1.05); opacity: 0.3; }
-  100% { transform: translate(0%, 0%) scale(0.9); opacity: 0.3; }
+@font-face {
+  font-family: "Drafting Mono";
+  src: url("/DraftingMono-Medium.otf") format("opentype");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
 }
 
-@keyframes bubble-float-3 {
-  0% { transform: translate(0%, 0%) scale(1.1); opacity: 0.2; }
-  25% { transform: translate(-3%, 1%) scale(0.95); opacity: 0.4; }
-  50% { transform: translate(2%, 2%) scale(1.05); opacity: 0.3; }
-  75% { transform: translate(1%, -2%) scale(1); opacity: 0.2; }
-  100% { transform: translate(0%, 0%) scale(1.1); opacity: 0.2; }
+@font-face {
+  font-family: "Drafting Mono";
+  src: url("/DraftingMono-SemiBold.otf") format("opentype");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
 }
 
-@keyframes bubble-float-4 {
-  0% { transform: translate(0%, 0%) scale(0.95); opacity: 0.4; }
-  25% { transform: translate(3%, 2%) scale(1.05); opacity: 0.6; }
-  50% { transform: translate(-2%, -1%) scale(1); opacity: 0.5; }
-  75% { transform: translate(-1%, 3%) scale(0.9); opacity: 0.4; }
-  100% { transform: translate(0%, 0%) scale(0.95); opacity: 0.4; }
+@font-face {
+  font-family: "Drafting Mono";
+  src: url("/DraftingMono-Bold.otf") format("opentype");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
 }
 
-.animate-bubble-float-1 {
-  animation: bubble-float-1 12s ease-in-out infinite;
+:root {
+  color-scheme: dark;
+  --bg: #000000;
+  --fg: #E0E0E0;
+  --title: #FFFFFF;
+  --subtitle: #A0A0A0;
+  --text: #E0E0E0;
+  --muted: #555555;
+
+  /* Cyber-Brutalist Palette */
+  --neon-green: #00FF00;
+  --hot-pink: #FF00FF;
+  --electric-blue: #00FFFF;
+  --warning-yellow: #FFFF00;
+  --pure-black: #000000;
+  --pure-white: #FFFFFF;
+
+  /* Structural Tokens */
+  --border-thick: 4px;
+  --border-thin: 2px;
+  --shadow-hard: 6px 6px 0px 0px;
+  --shadow-hard-sm: 4px 4px 0px 0px;
 }
 
-.animate-bubble-float-2 {
-  animation: bubble-float-2 15s ease-in-out infinite;
+[data-theme="light"] {
+  /* We are forcing a dark aesthetics for this specific artistic direction, 
+     but keeping light vars just in case, mapped to high contrast */
+  color-scheme: light;
+  --bg: #FFFFFF;
+  --fg: #000000;
+  --title: #000000;
+  --subtitle: #333333;
+  --text: #111111;
+  --muted: #888888;
 }
 
-.animate-bubble-float-3 {
-  animation: bubble-float-3 18s ease-in-out infinite;
-}
-
-.animate-bubble-float-4 {
-  animation: bubble-float-4 20s ease-in-out infinite;
-}
-
-@keyframes fade-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-@keyframes fade-in-up {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes slide-in-right {
-  from {
-    opacity: 0;
-    transform: translateX(-20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
-}
-
-@keyframes scroll-fade {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.animate-fade-in {
-  animation: fade-in 0.6s ease-out forwards;
-}
-
-.animate-fade-in-up {
-  animation: fade-in-up 0.8s ease-out forwards;
-}
-
-.animate-slide-in-right {
-  animation: slide-in-right 0.8s ease-out forwards;
-}
-
-.animate-scroll-fade {
-  animation: scroll-fade 0.6s ease-out forwards;
-}
-
-/* Hide the NEXT_REDIRECT flash message */
-[data-message="NEXT_REDIRECT"] {
-  display: none !important;
-}
-
-/* Font classes */
-.font-safiro {
-  font-family: var(--font-safiro);
-}
-
-.font-borna {
-  font-family: var(--font-borna);
-}
-
-/* Navbar visibility fix for mobile */
-@media (max-width: 640px) {
-  nav {
-    display: block !important;
-    visibility: visible !important;
-    opacity: 1 !important;
-  }
-}
-
-/* Hide scrollbar for Chrome, Safari and Opera */
-.no-scrollbar::-webkit-scrollbar {
-  display: none;
-}
-
-/* Hide scrollbar for IE, Edge and Firefox */
-.no-scrollbar {
-  -ms-overflow-style: none;  /* IE and Edge */
-  scrollbar-width: none;  /* Firefox */
-}
-
-/* Custom Scrollbar Styles */
-.custom-scrollbar {
-  scrollbar-width: thin;
-  scrollbar-color: rgba(249, 246, 238, 0.5) transparent;
-}
-
-.custom-scrollbar::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-.custom-scrollbar::-webkit-scrollbar-track {
+html,
+body {
   background: transparent;
-  border-radius: 12px;
+  color: var(--text);
+  font-family: "Drafting Mono", monospace;
+  font-weight: 400;
+  letter-spacing: -0.03em;
+  letter-spacing: -0.03em;
+  min-height: 100%;
+  overflow-x: hidden;
 }
 
-.custom-scrollbar::-webkit-scrollbar-thumb {
-  background: rgba(249, 246, 238, 0.3);
-  border-radius: 12px;
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
-  transition: all 0.3s ease;
-  border: none;
+::selection {
+  background: var(--title);
+  color: var(--bg);
 }
 
-.custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: rgba(249, 246, 238, 0.5);
+a {
+  color: inherit;
+  text-decoration: none;
 }
 
-.custom-scrollbar::-webkit-scrollbar-corner {
-  background: transparent;
+a:hover:not(.no-underline):not(.card-link),
+a:focus-visible:not(.no-underline):not(.card-link) {
+  text-decoration: underline;
+  text-decoration-thickness: 0.5px;
 }
 
-/* Hide scrollbar buttons */
-.custom-scrollbar::-webkit-scrollbar-button {
-  display: none;
+.card-link {
+  text-decoration: none;
 }
 
-/* Premium scrollbar style with light, rounded design */
-.premium-scrollbar {
-  scrollbar-width: thin;
-  scrollbar-color: rgba(249, 246, 238, 0.4) transparent;
+.card-link:hover,
+.card-link:focus-visible {
+  text-decoration: none;
 }
 
-.premium-scrollbar::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+button a,
+a[class*="inline-flex"] {
+  color: inherit !important;
 }
 
-.premium-scrollbar::-webkit-scrollbar-track {
-  background: transparent;
-  border-radius: 12px;
+.display {
+  font-size: clamp(3.2rem, 5vw + 1rem, 7rem);
+  line-height: 0.9;
+  letter-spacing: -0.1em;
+  font-weight: 700;
+  color: var(--title);
 }
 
-.premium-scrollbar::-webkit-scrollbar-thumb {
-  background: rgba(249, 246, 238, 0.3);
-  border-radius: 12px;
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  box-shadow: 0 0 10px rgba(249, 246, 238, 0.1);
-  border: none;
-  transition: all 0.3s ease;
+.lead {
+  font-size: clamp(1.2rem, 0.8vw + 1rem, 1.5rem);
+  letter-spacing: -0.06em;
+  font-weight: 600;
+  color: var(--subtitle);
 }
 
-.premium-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: rgba(249, 246, 238, 0.5);
+.small {
+  font-size: 0.875rem;
 }
 
-.premium-scrollbar::-webkit-scrollbar-corner {
-  background: transparent;
+.body {
+  font-size: 1.125rem;
+  letter-spacing: -0.03em;
+  font-weight: 400;
+  color: var(--text);
 }
 
-/* Hide scrollbar buttons */
-.premium-scrollbar::-webkit-scrollbar-button {
-  display: none;
+.container {
+  width: 100%;
+  max-width: 1200px;
+  margin-inline: auto;
+  padding-inline: 1rem;
 }
 
-/* Minimal scrollbar for content areas */
-.minimal-scrollbar {
-  scrollbar-width: thin;
-  scrollbar-color: rgba(249, 246, 238, 0.2) transparent;
+@keyframes ambientGradient {
+  0% {
+    background-position: 0% 50%;
+  }
+
+  25% {
+    background-position: 50% 100%;
+  }
+
+  50% {
+    background-position: 100% 50%;
+  }
+
+  75% {
+    background-position: 50% 0%;
+  }
+
+  100% {
+    background-position: 0% 50%;
+  }
 }
 
-.minimal-scrollbar::-webkit-scrollbar {
-  width: 4px;
-  height: 4px;
+@keyframes ambientGradientReverse {
+  0% {
+    background-position: 100% 50%;
+  }
+
+  25% {
+    background-position: 50% 0%;
+  }
+
+  50% {
+    background-position: 0% 50%;
+  }
+
+  75% {
+    background-position: 50% 100%;
+  }
+
+  100% {
+    background-position: 100% 50%;
+  }
 }
 
-.minimal-scrollbar::-webkit-scrollbar-track {
-  background: transparent;
-  border-radius: 12px;
+@keyframes ambientGradientTilt {
+  0% {
+    background-position: 30% 0%;
+  }
+
+  20% {
+    background-position: 70% 40%;
+  }
+
+  50% {
+    background-position: 100% 80%;
+  }
+
+  80% {
+    background-position: 40% 100%;
+  }
+
+  100% {
+    background-position: 0% 60%;
+  }
 }
 
-.minimal-scrollbar::-webkit-scrollbar-thumb {
-  background: rgba(249, 246, 238, 0.15);
-  border-radius: 12px;
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
+@keyframes ambientGradientWave {
+  0% {
+    background-position: 50% 100%;
+  }
+
+  30% {
+    background-position: 70% 30%;
+  }
+
+  60% {
+    background-position: 30% 0%;
+  }
+
+  85% {
+    background-position: 0% 70%;
+  }
+
+  100% {
+    background-position: 50% 100%;
+  }
 }
 
-.minimal-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: rgba(249, 246, 238, 0.25);
+@media (prefers-reduced-motion: reduce) {
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
-.minimal-scrollbar::-webkit-scrollbar-corner {
-  background: transparent;
-}
-
-/* Hide scrollbar buttons */
-.minimal-scrollbar::-webkit-scrollbar-button {
-  display: none;
-}
-
-/* Modern scrollbar with enhanced blur effect */
-.modern-scrollbar {
-  scrollbar-width: thin;
-  scrollbar-color: rgba(249, 246, 238, 0.4) transparent;
-  --scrollbar-color: rgba(249, 246, 238, 0.3);
-  --scrollbar-hover-color: rgba(249, 246, 238, 0.6);
-  --scrollbar-width: 6px;
-  --scrollbar-radius: 20px;
-}
-
-.modern-scrollbar::-webkit-scrollbar {
-  width: var(--scrollbar-width);
-  height: var(--scrollbar-width);
-}
-
-.modern-scrollbar::-webkit-scrollbar-track {
-  background: transparent;
-  border-radius: var(--scrollbar-radius);
-  margin: 2px;
-}
-
-.modern-scrollbar::-webkit-scrollbar-thumb {
-  background: var(--scrollbar-color);
-  border-radius: var(--scrollbar-radius);
+/* Glass-morphic card styles */
+.glass-card {
+  background: rgba(20, 20, 20, 0.8);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  box-shadow: 0 0 20px rgba(249, 246, 238, 0.15);
-  border: none;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 1rem;
+  transition: all 0.3s ease;
 }
 
-.modern-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: var(--scrollbar-hover-color);
-  box-shadow: 0 0 20px rgba(249, 246, 238, 0.4);
+.glass-card:hover {
+  border-color: rgba(255, 255, 255, 0.15);
+  background: rgba(20, 20, 20, 0.9);
 }
 
-.modern-scrollbar::-webkit-scrollbar-corner {
-  background: transparent;
+.glass-card-highlight {
+  background: rgba(25, 25, 25, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 1rem;
+  transition: all 0.3s ease;
 }
 
-/* For WebKit browsers (Chrome, Safari) - hiding scroll buttons */
-.modern-scrollbar::-webkit-scrollbar-button {
-  width: 0;
-  height: 0;
+.glass-card-highlight:hover {
+  border-color: rgba(255, 255, 255, 0.25);
+  background: rgba(30, 30, 30, 0.9);
+}
+
+.glass-badge {
+  background: rgba(20, 20, 20, 0.9);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 9999px;
+}
+
+.glass-button {
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 0.5rem;
+  transition: all 0.2s ease;
+}
+
+.glass-button:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.glass-button-primary {
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 0.5rem;
+  color: var(--fg);
+  transition: all 0.2s ease;
+}
+
+.glass-button-primary:hover {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+/* Hide scrollbar utility */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
   display: none;
-}
-
-/* For larger screens, increase scrollbar width slightly */
-@media (min-width: 768px) {
-  .modern-scrollbar {
-    --scrollbar-width: 8px;
-  }
-}
-
-/* More subtle scrollbar for dark mode */
-.dark .modern-scrollbar {
-  --scrollbar-color: rgba(249, 246, 238, 0.2);
-  --scrollbar-hover-color: rgba(249, 246, 238, 0.4);
-}
-
-/* For Firefox */
-@supports (scrollbar-width: thin) {
-  .modern-scrollbar {
-    scrollbar-width: thin;
-    scrollbar-color: var(--scrollbar-color) transparent;
-  }
-}
-
-/* For Edge and IE - would need additional styles */
-@supports (-ms-overflow-style: none) {
-  .modern-scrollbar {
-    -ms-overflow-style: none;
-  }
-  .modern-scrollbar::-webkit-scrollbar {
-    display: none;
-  }
-}
-
-/* Custom tabs styling for DocumentAnalyzer */
-.custom-tabs .ant-tabs-nav::before {
-  border-bottom-color: #222222 !important;
-}
-
-.custom-tabs .ant-tabs-tab {
-  color: #C5C2BA !important;
-  font-family: 'Borna', sans-serif !important;
-  padding: 12px 16px !important;
-  transition: all 0.3s ease !important;
-}
-
-.custom-tabs .ant-tabs-tab:hover {
-  color: #F9F6EE !important;
-}
-
-.custom-tabs .ant-tabs-tab.ant-tabs-tab-active .ant-tabs-tab-btn {
-  color: #B4916C !important;
-  font-weight: 500 !important;
-}
-
-.custom-tabs .ant-tabs-ink-bar {
-  background-color: #B4916C !important;
-  height: 3px !important;
-}
-
-.custom-tabs .ant-tabs-content-holder {
-  padding: 20px 0 !important;
-}
-
-/* Card styling */
-.custom-tabs .ant-card {
-  background-color: #111111 !important;
-  border: 1px solid #222222 !important;
-  border-radius: 8px !important;
-  overflow: hidden !important;
-}
-
-.custom-tabs .ant-card-head {
-  background-color: #171717 !important;
-  border-bottom: 1px solid #222222 !important;
-  color: #F9F6EE !important;
-  font-family: 'Safiro', sans-serif !important;
-}
-
-.custom-tabs .ant-card-body {
-  color: #C5C2BA !important;
-  font-family: 'Borna', sans-serif !important;
-}
-
-.custom-tabs .ant-empty {
-  color: #8A8782 !important;
-}
-
-.custom-tabs .ant-collapse {
-  background-color: transparent !important;
-  border: none !important;
-}
-
-.custom-tabs .ant-collapse-item {
-  border-color: #222222 !important;
-}
-
-.custom-tabs .ant-collapse-header {
-  color: #F9F6EE !important;
-  font-family: 'Borna', sans-serif !important;
-}
-
-.custom-tabs .ant-collapse-content {
-  background-color: #171717 !important;
-  border-color: #222222 !important;
-}
-
-.custom-tabs .recharts-text {
-  fill: #C5C2BA !important;
-  font-family: 'Borna', sans-serif !important;
 }
