@@ -139,11 +139,13 @@ export default function RootLayout({
       </head>
       <body className="min-h-[100dvh] bg-[#050505] font-borna">
         <TransitionCurtain />
-        <I18nProvider>
-          <ThemeProvider defaultTheme="dark" storageKey="app-theme">
-            {children}
-          </ThemeProvider>
-        </I18nProvider>
+        <AuthProvider>
+          <I18nProvider>
+            <ThemeProvider defaultTheme="dark" storageKey="app-theme">
+              {children}
+            </ThemeProvider>
+          </I18nProvider>
+        </AuthProvider>
       </body>
     </html>
   );

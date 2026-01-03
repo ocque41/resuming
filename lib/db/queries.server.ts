@@ -1,47 +1,70 @@
-// lib/db/queries.server.ts
 import { desc, and, eq, isNull, like, ilike, not, isNotNull } from 'drizzle-orm';
 import { db } from './drizzle';
-import { 
-  activityLogs, 
-  teamMembers, 
-  teams, 
-  users, 
-  cvs, 
-  documentAnalyses, 
-  DocumentAnalysis, 
-  NewDocumentAnalysis 
+import { createClient } from '@/lib/supabase/server';
+import {
+  activityLogs,
+  teamMembers,
+  teams,
+  users,
+  cvs,
+  documentAnalyses,
+  DocumentAnalysis,
+  NewDocumentAnalysis
 } from './schema';
 import { cookies } from 'next/headers';
 import { verifyToken } from '@/lib/auth/session';
 import { logger } from "@/lib/logger";
 
 export async function getUser() {
-  const sessionCookie = (await cookies()).get('session');
-  if (!sessionCookie || !sessionCookie.value) {
-    return null;
-  }
+  const supabase = await createClient();
+  const { data: { user: supabaseUser } } = await supabase.auth.getUser();
 
-  const sessionData = await verifyToken(sessionCookie.value);
-  if (
-    !sessionData ||
-    !sessionData.user ||
-    typeof sessionData.user.id !== 'number'
-  ) {
-    return null;
-  }
-
-  if (new Date(sessionData.expires) < new Date()) {
+  if (!supabaseUser || !supabaseUser.email) {
     return null;
   }
 
   const user = await db
     .select()
     .from(users)
-    .where(and(eq(users.id, sessionData.user.id), isNull(users.deletedAt)))
+    .where(and(eq(users.email, supabaseUser.email), isNull(users.deletedAt)))
     .limit(1);
 
   if (user.length === 0) {
-    return null;
+    // Auto-provision user
+    try {
+      const newUser = {
+        email: supabaseUser.email,
+        name: supabaseUser.user_metadata?.full_name || supabaseUser.email.split('@')[0],
+        // Use a placeholder hash that won't match any real password
+        passwordHash: 'sso-managed-account',
+        role: 'owner',
+        emailVerified: new Date(),
+        admin: false,
+      };
+
+      const [createdUser] = await db.insert(users).values(newUser).returning();
+
+      // Create a default team
+      const newTeam = {
+        name: `${newUser.name}'s Team`,
+        planName: 'Free',
+        subscriptionStatus: 'active' // Give them active status by default for now
+      };
+
+      const [createdTeam] = await db.insert(teams).values(newTeam).returning();
+
+      // Link user to team
+      await db.insert(teamMembers).values({
+        userId: createdUser.id,
+        teamId: createdTeam.id,
+        role: 'owner',
+      });
+
+      return createdUser;
+    } catch (e) {
+      console.error("Error auto-provisioning user:", e);
+      return null;
+    }
   }
 
   return user[0];
@@ -56,12 +79,12 @@ export async function getUser() {
 export async function getUserById(userId: string | number): Promise<typeof users.$inferSelect | null> {
   // Convert string ID to number if needed
   const numericId = typeof userId === 'string' ? parseInt(userId, 10) : userId;
-  
+
   if (isNaN(numericId)) {
     logger.error(`Invalid user ID format: ${userId}`);
     return null;
   }
-  
+
   try {
     const user = await db
       .select()
@@ -191,22 +214,22 @@ export async function getCVsForUser(userId: number) {
       where: eq(cvs.userId, userId),
       orderBy: [desc(cvs.createdAt)],
     });
-    
+
     // Process file URLs for different storage types
     const processedResults = results.map(cv => {
       // Parse metadata to check storage type
       const metadata = cv.metadata ? JSON.parse(cv.metadata) : {};
       const storageType = metadata.storageType || (cv.filepath?.startsWith('/') ? 'dropbox' : 's3');
-      
+
       // For the client, store the storage type if it's missing
       if (!metadata.storageType) {
         metadata.storageType = storageType;
         cv.metadata = JSON.stringify(metadata);
       }
-      
+
       return cv;
     });
-    
+
     return processedResults;
   } catch (error) {
     console.error("Error getting CVs for user:", error);
@@ -229,26 +252,26 @@ export async function getCVByFileName(fileName: string) {
     let cv = await db.query.cvs.findFirst({
       where: eq(cvs.fileName, fileName),
     });
-    
+
     // If not found, try finding by filepath containing the filename
     if (!cv) {
       const cvs = await db.query.cvs.findMany();
-      cv = cvs.find((cv) => 
-        cv.filepath?.includes(fileName) || 
+      cv = cvs.find((cv) =>
+        cv.filepath?.includes(fileName) ||
         cv.fileName?.includes(fileName)
       );
     }
-    
+
     if (cv) {
       // Parse metadata to check storage type
       const metadata = cv.metadata ? JSON.parse(cv.metadata) : {};
       const storageType = metadata.storageType || (cv.filepath?.startsWith('/') ? 'dropbox' : 's3');
-      
+
       // For the client, store the storage type if it's missing
       if (!metadata.storageType) {
         metadata.storageType = storageType;
         cv.metadata = JSON.stringify(metadata);
-        
+
         // Update the record with the storage type info
         try {
           await db.update(cvs)
@@ -259,7 +282,7 @@ export async function getCVByFileName(fileName: string) {
         }
       }
     }
-    
+
     return cv;
   } catch (error) {
     console.error("Error getting CV by filename:", error);
@@ -301,13 +324,13 @@ export async function saveDocumentAnalysis(
 
     // Calculate the new version number
     const newVersion = existingVersions.length > 0 ? existingVersions[0].version + 1 : 1;
-    
+
     // Extract structured data for the indexed fields
     const overallScore = analysisData.summary?.overallScore || 0;
     const sentimentScore = Math.round((analysisData.sentimentAnalysis?.overallScore || 0) * 100);
     const keywordCount = analysisData.contentAnalysis?.topKeywords?.length || 0;
     const entityCount = analysisData.keyInformation?.entities?.length || 0;
-    
+
     // Insert the new analysis
     const result = await db
       .insert(documentAnalyses)
@@ -326,10 +349,10 @@ export async function saveDocumentAnalysis(
         rawAnalysisResponse: analysisData
       })
       .returning();
-      
+
     // Also update the CV's metadata field for backward compatibility
     await updateCVAnalysis(cvId, JSON.stringify(analysisData));
-      
+
     console.log(`Document analysis saved with ID ${result[0].id}, version ${newVersion}`);
     return result[0];
   } catch (error) {
@@ -353,7 +376,7 @@ export async function getLatestDocumentAnalysis(
       .where(eq(documentAnalyses.cvId, cvId))
       .orderBy(desc(documentAnalyses.version))
       .limit(1);
-      
+
     return analyses.length > 0 ? analyses[0] : undefined;
   } catch (error) {
     console.error(`Error getting latest analysis for CV ${cvId}:`, error);
@@ -388,7 +411,7 @@ export async function getAllDocumentAnalyses(
 export async function migrateExistingAnalyses(): Promise<number> {
   try {
     let migratedCount = 0;
-    
+
     // Get all CVs with metadata
     const cvsWithMetadata = await db
       .select()
@@ -400,14 +423,14 @@ export async function migrateExistingAnalyses(): Promise<number> {
           not(eq(cvs.metadata, 'null'))
         )
       );
-      
+
     console.log(`Found ${cvsWithMetadata.length} CVs with metadata to migrate`);
-    
+
     // Migrate each CV's analysis data
     for (const cv of cvsWithMetadata) {
       try {
         if (!cv.metadata) continue;
-        
+
         // Try to parse the metadata JSON
         let metadata;
         try {
@@ -416,12 +439,12 @@ export async function migrateExistingAnalyses(): Promise<number> {
           console.error(`Error parsing metadata for CV ${cv.id}:`, e);
           continue;
         }
-        
+
         // Check if metadata contains analysis data
         if (metadata.analysis || metadata.contentAnalysis || metadata.sentimentAnalysis) {
           // Extract the analysis data
           const analysisData = metadata.analysis || metadata;
-          
+
           // Save to the new table
           await saveDocumentAnalysis(cv.id, analysisData, 'migrated');
           migratedCount++;
@@ -431,7 +454,7 @@ export async function migrateExistingAnalyses(): Promise<number> {
         console.error(`Error migrating analysis for CV ${cv.id}:`, cvError);
       }
     }
-    
+
     console.log(`Successfully migrated ${migratedCount} analysis records`);
     return migratedCount;
   } catch (error) {
@@ -446,22 +469,22 @@ async function connectToDatabase() {
   if (typeof db !== 'undefined') {
     return db;
   }
-  
+
   // Otherwise, create a new connection
   // This is a placeholder implementation - adjust based on your actual database setup
   try {
     // For PostgreSQL with node-postgres
     const { Pool } = require('pg');
-    
+
     const pool = new Pool({
       connectionString: process.env.DATABASE_URL,
       ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
     });
-    
+
     // Test the connection
     await pool.query('SELECT NOW()');
     console.log('Database connection established');
-    
+
     return pool;
   } catch (error) {
     console.error('Failed to connect to the database:', error);
@@ -494,60 +517,60 @@ export async function getAllUserDocuments(
       sortBy = 'createdAt',
       sortOrder = 'desc'
     } = options;
-    
+
     // Calculate offset
     const offset = (page - 1) * limit;
-    
+
     // Connect to the database
     const db = await connectToDatabase();
-    
+
     // Determine the table name based on your database structure
     // This assumes you have a 'documents' table, but you might have a different name
     const tableName = 'documents';
-    
+
     // Build the query - adapt field names to match your actual database schema
     let query = `
       SELECT * FROM ${tableName} 
       WHERE "userId" = $1
     `;
-    
+
     const queryParams = [userId];
     let paramIndex = 2;
-    
+
     // Add search filter if provided
     if (search) {
       query += ` AND ("fileName" ILIKE $${paramIndex} OR "metadata" ILIKE $${paramIndex})`;
       queryParams.push(`%${search}%`);
       paramIndex++;
     }
-    
+
     // Add sorting - ensure the column name exists in your table
     // Use double quotes for column names to handle case sensitivity in PostgreSQL
     query += ` ORDER BY "${sortBy}" ${sortOrder.toUpperCase()}`;
-    
+
     // Add pagination
     query += ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
     queryParams.push(limit, offset);
-    
+
     // Execute the query
     const result = await db.query(query, queryParams);
     const documents = result.rows || [];
-    
+
     // Get total count for pagination
     const countQuery = `
       SELECT COUNT(*) FROM ${tableName} 
       WHERE "userId" = $1
       ${search ? ` AND ("fileName" ILIKE $2 OR "metadata" ILIKE $2)` : ''}
     `;
-    
+
     const countParams = [userId];
     if (search) {
       countParams.push(`%${search}%`);
     }
-    
+
     const countResult = await db.query(countQuery, countParams);
     const totalCount = parseInt(countResult.rows[0].count, 10);
-    
+
     return {
       documents,
       totalCount,
